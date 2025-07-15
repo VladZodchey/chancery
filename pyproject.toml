@@ -1,0 +1,21 @@
+[project]
+name = "chancery_backend"
+version = "0.1.0"
+description = "The Flask back end of the Chancery, the pastebin-like log tool."
+requires-python = ">=3.12"
+authors = [{ name = "vladzodchey", email = "vlad@videvsys.ru" }]
+maintainers = [{ name = "vladzodchey", email = "vlad@videvsys.ru" }]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+dependencies = [
+    "bcrypt>=4.3.0",
+    "dotenv>=0.9.9",
+    "flask>=3.1.1",
+    "flask-cors>=6.0.1",
+    "pyseto>=1.8.4",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.3",
+]

@@ -1,0 +1,5 @@
+.venv
+pastes/
+protected/
+.env
+*.db
