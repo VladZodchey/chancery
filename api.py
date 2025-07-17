@@ -1,23 +1,27 @@
 """
 Notes:
-    [12.07.25] I'm a lazy ass so "privileges" and "permissions" are used interchangeably. Sorry about that.
-    [12.07.25] Currently, input validation in DB glue is bloated, but I can't wrap my head around refactoring it without compromising safety.
-    [13.07.25] Writing the security kind of stuff for the DB glue gives me the subconscious feeling of me missing some low-hanging vulnerability.
-    [14.07.25] The @require_auth decorator feels sus.
-    [14.07.25] Apparently the ``pyseto`` library doesn't actually check expiration, so I'll have to do it manually.
+    [12.07.25] @vladzodchey I'm a lazy ass so "privileges" and "permissions" are used interchangeably. Sorry about that.
+    [12.07.25] @vladzodchey Currently, input validation in DB glue is weird, but I can't wrap my head around refactoring it without compromising safety.
+    [13.07.25] @vladzodchey Writing the security kind of stuff for the DB glue gives me the subconscious feeling of me missing some low-hanging vulnerability.
+    [14.07.25] @vladzodchey The @require_auth decorator feels sus.
+    [14.07.25] @vladzodchey Apparently the ``pyseto`` library doesn't actually check expiration, so I'll have to do it manually.
+    [15.07.25] @vladzodchey Seriously, get someone qualified to review the security...
+    [16.07.25] @vladzodchey Fuck... I need to change the file architecture... I'm tired...
 Todo:
-    - Cleanup route that triggers paste and session expiration checks
     - Limit concurrent sessions (per user) to 5
     - When enabling CORS, add option to allow user registration only to LAN
     - Encrypt read-protected files
     - Implement API endpoints (including rewriting db.read_paste security)
+    - Implement actual production/development startup
+    - Add coherent logging
+    - Add an non-authenticated mode (for local use)
 """
 from typing import Optional, Callable
 from json import loads, dumps
 from string import ascii_letters, digits
 from functools import wraps
 
-from sqlite3 import connect, Row, IntegrityError
+from sqlite3 import connect, Row, IntegrityError, OperationalError
 from bcrypt import hashpw, gensalt
 from secrets import token_urlsafe, token_bytes, choice
 from datetime import timedelta, datetime, UTC
@@ -286,7 +290,7 @@ class Glue:
         except (IndexError, IntegrityError):
             raise RuntimeError('Insertion of user failed')
 
-    def login(self, username: str, password: str, remember: bool = True) -> tuple[int, str | None, str]:
+    def login(self, username: str, password: str, remember: bool = True) -> tuple[int, Optional[str], str]:
         """Logs in a user. Produces access & refresh tokens.
 
         Args:
@@ -508,7 +512,8 @@ class Glue:
                 (paste_id,),
                 out_dict=True
             )[0]
-            if result.get('protected'):
+            protected = result.get('protected')
+            if protected:
                 try:
                     assert self.is_permitted(user_id, READ)
                 except (TypeError, KeyError, AssertionError):
@@ -540,7 +545,7 @@ class Glue:
             if expires_at:
                 returnable['expires_at'] = expires_at
             return returnable
-        except IndexError | FileNotFoundError:
+        except (IndexError, FileNotFoundError):
             raise KeyError('The paste was not found')
         except TimeoutError as e:
             raise KeyError(e)
@@ -578,7 +583,7 @@ class Glue:
             str: The unique ID of a newly created paste.
         Raises:
             TypeError: If content or some metadata keys are of wrong type
-            ValueError: If some metadata keys are invalid or unserializable
+            ValueError: If some metadata keys are invalid or not serializable
             KeyError: If the poster's ID doesn't exist
             RuntimeError: If generating a new ID failed (attempts depleted, normally shouldn't happen)
         """
@@ -613,6 +618,27 @@ class Glue:
             with open(path.join(self.protected_filepath, paste_id), mode='w', encoding='utf-8') as file:
                 file.write(content)
         return paste_id
+
+    def cleanup(self) -> None:
+        """Attempts to perform a cleanup of expired pastes and refresh tokens.
+
+        Returns:
+            Nothing.
+        Raises:
+            RuntimeError: If performing cleanup failed
+        """
+        try:
+            db.query("DELETE FROM sessions WHERE expires_at < datetime('now')")
+            files = db.query("SELECT id, protected FROM pastes WHERE expires_at < datetime('now')")
+            if files:
+                for file_id, protected in map(lambda i: i[0], files):
+                    if protected:
+                        remove(path.join(self.protected_filepath, file_id))
+                    else:
+                        remove(path.join(self.filepath, file_id))
+            db.query("DELETE FROM pastes WHERE expires_at < datetime('now')")
+        except (OperationalError, FileNotFoundError, PermissionError):
+            raise RuntimeError('SQL querying failed')
 
 
 app = Flask(__name__)
@@ -659,12 +685,6 @@ def optional_auth(f: Callable) -> Callable:
     return decorated
 
 
-@app.get('/protected')
-@require_auth
-def protected(user_id: int):
-    return 'Oh noes! You accessed protected data! Whatever shall I do?'
-
-
 @app.post('/login')
 def login():
     data = request.get_json()
@@ -691,8 +711,7 @@ def login():
 
 @app.post('/refresh')
 def refresh():
-    data = request.get_json()
-    refresh_token = data.get('refresh_token')
+    refresh_token = request.cookies.get('refreshToken')
     if refresh_token:
         try:
             access_token = db.refresh_access(refresh_token)
@@ -705,8 +724,11 @@ def refresh():
 @app.post('/register')
 @require_auth
 def register(user_id):
-    if not db.is_permitted(user_id, ADMIN):
-        abort(HTTPStatus.UNAUTHORIZED, description="You don't have enough rights to do that.")
+    try:
+        if not db.is_permitted(user_id, ADMIN):
+            abort(HTTPStatus.UNAUTHORIZED, description="You don't have enough rights to do that.")
+    except (KeyError, TypeError, ValueError):
+        abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
@@ -766,6 +788,19 @@ def create(user_id):
         abort(HTTPStatus.INTERNAL_SERVER_ERROR, description='Server failed generating unique link')
     except KeyError:
         abort(HTTPStatus.UNAUTHORIZED, description='Malformed authentication token')
+
+@app.post('/cleanup')
+@require_auth
+def cleanup(user_id):
+    try:
+        if not db.is_permitted(user_id, ADMIN):
+            abort(HTTPStatus.UNAUTHORIZED, description="You don't have enough rights to do that.")
+    except (KeyError, ValueError, TypeError):
+        abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
+    try:
+        db.cleanup()
+    except RuntimeError:
+        abort(HTTPStatus.INTERNAL_SERVER_ERROR, description="Cleanup failed")
 
 
 if __name__ == '__main__':
