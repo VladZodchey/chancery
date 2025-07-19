@@ -6,12 +6,13 @@ requires-python = ">=3.12"
 authors = [{ name = "vladzodchey", email = "vlad@videvsys.ru" }]
 maintainers = [{ name = "vladzodchey", email = "vlad@videvsys.ru" }]
 readme = "README.md"
-license = "GPL-3.0-or-later"
+license = "MIT"
 dependencies = [
     "bcrypt>=4.3.0",
     "dotenv>=0.9.9",
     "flask>=3.1.1",
     "flask-cors>=6.0.1",
+    "gunicorn>=23.0.0",
     "pyseto>=1.8.4",
 ]
 
