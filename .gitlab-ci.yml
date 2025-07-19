@@ -3,7 +3,9 @@ stages:
 
 build-docker:
   stage: build
-  image: docker:24.0
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
   variables:
     IMAGE_NAME: $CI_REGISTRY/$CI_PROJECT_PATH:$CI_COMMIT_REF_SLUG
   before_script:
