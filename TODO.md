@@ -1,1 +1,4 @@
-- [ ] Перевести комментарии в коде с басурманского на человеческий
+- [ ] Implement multilingual docs/readme files
+- [ ] Write unittests for API and DB
+- [ ] Implement CI/CD pipeline for building
+- [ ] Write actual docs
