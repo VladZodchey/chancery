@@ -1,0 +1,9 @@
+README.md
+TODO.md
+*.db
+.git
+.gitignore
+.venv
+pastes
+protected
+docs
