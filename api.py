@@ -7,16 +7,22 @@ Notes:
     [14.07.25] @vladzodchey Apparently the ``pyseto`` library doesn't actually check expiration, so I'll have to do it manually.
     [15.07.25] @vladzodchey Seriously, get someone qualified to review the security...
     [16.07.25] @vladzodchey Fuck... I need to change the file architecture... I'm tired...
+    [19.07.25] @vladzodchey Authentication gives me a headache. Why did I even plan a non-authorized mode?
+    [19.07.25] @vladzodchey read_paste is kinda lame. I bet there's a more pythonic way to do this.
+    [19.06.25] @vladzodchey I hope it kinda works now...
 Todo:
     - Limit concurrent sessions (per user) to 5
     - When enabling CORS, add option to allow user registration only to LAN
     - Encrypt read-protected files
     - Implement API endpoints (including rewriting db.read_paste security)
-    - Implement actual production/development startup
     - Add coherent logging
-    - Add an non-authenticated mode (for local use)
+    - Add a non-authenticated mode (for local use)
+    - Add cooldowns to endpoints
+    - Pass refresh token as a cookie, not as a body property
+    - Add password protection to pastes, implement setting expiration
+    - Add resource deletion routes
 """
-from typing import Optional, Callable
+from typing import Optional, Callable, Any
 from json import loads, dumps
 from string import ascii_letters, digits
 from functools import wraps
@@ -54,56 +60,72 @@ class Glue:
     def __init__(
             self,
             paseto_key: bytes,
-            pastes_path='./pastes',
-            protected_path='./protected',
-            db_path: str = 'file::memory:?cache=shared'):
+            pastes_path: str,
+            protected_path: str,
+            db_path: str,
+            authorized: bool
+    ):
         if not db_path:
             raise TypeError('The path to the DB is empty')
         if not pastes_path:
             print('Warning: the path to pastes is empty. New pastes will be created in the same directory as the process.')
         if not protected_path:
-            print('Warning: the path to protected pastes is empty, protection will worsen. Chancery is not liable of any leaked information.')
+            if authorized:
+                print('Warning: the path to protected pastes is empty, protection will worsen. Chancery is not liable for any leaked information.')
         self.dbpath = db_path
         self.filepath = pastes_path
         self.protected_filepath = protected_path
+        self.authorized = authorized
         self.paseto_key = Key.new(version=4, purpose='local', key=paseto_key)
         self.paseto = Paseto(leeway=60)
         with connect(self.dbpath) as conn:
             cursor = conn.cursor()
-            cursor.executescript("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                password BLOB NOT NULL,
-                privileges INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-            CREATE TABLE IF NOT EXISTS pastes (
-                id TEXT PRIMARY KEY,
-                author TEXT,
-                type TEXT NOT NULL DEFAULT 'txt',
-                protected INTEGER NOT NULL DEFAULT FALSE,
-                meta TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                expires_at TEXT,
-                FOREIGN KEY (author) REFERENCES users (username)
-            );
-            CREATE TABLE IF NOT EXISTS sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                uid INTEGER NOT NULL,
-                token TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                expires_at TEXT NOT NULL,
-                FOREIGN KEY (uid) REFERENCES users(id)
-            );
-            CREATE TABLE IF NOT EXISTS api_tokens (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                expires_at INTEGER,
-                privileges INTEGER NOT NULL DEFAULT 0
-            );
-            """)
+            if self.authorized:
+                cursor.executescript("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL UNIQUE,
+                    password BLOB NOT NULL,
+                    privileges INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                );
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    uid INTEGER NOT NULL,
+                    token TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    expires_at TEXT NOT NULL,
+                    FOREIGN KEY (uid) REFERENCES users(id)
+                );
+                CREATE TABLE IF NOT EXISTS api_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    expires_at INTEGER,
+                    privileges INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE IF NOT EXISTS pastes (
+                    id TEXT PRIMARY KEY,
+                    author TEXT,
+                    type TEXT NOT NULL DEFAULT 'txt',
+                    protected INTEGER NOT NULL DEFAULT FALSE,
+                    meta TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    expires_at TEXT,
+                    FOREIGN KEY (author) REFERENCES users (username)
+                );
+                """)
+            else:
+                cursor.executescript("""
+                    CREATE TABLE IF NOT EXISTS pastes (
+                        id TEXT PRIMARY KEY,
+                        author TEXT,
+                        type TEXT NOT NULL DEFAULT 'txt',
+                        meta TEXT NOT NULL DEFAULT '{}',
+                        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                        expires_at TEXT
+                    );
+                """)
             conn.commit()
 
     def query(self, query: str, params: tuple = (), out_dict: bool = False) -> list:
@@ -381,20 +403,31 @@ class Glue:
         except IndexError:
             raise ValueError('Refresh token is invalid')
 
-    def logout(self, refresh_token: str) -> None:
+    def logout(self, refresh_token: str, user_id: int) -> None:
         """Invalidates the refresh token.
 
         Args:
             refresh_token (str): The session token to burn
+            user_id (int): The ID of a user that requested logout
         Returns:
             Nothing.
         Raises:
             TypeError: If the token is not a string
-            ValueError: If the token is already invalid
+            ValueError: If the token is already invalid or never existed
+            PermissionError: If the user that requests logout does not match the session owner
         """
         if not isinstance(refresh_token, str):
             raise TypeError('Refresh token must be a string')
-        self.query('DELETE FROM sessions WHERE text = ?', (refresh_token,))  # this is a suspiciously fast exit
+        if not isinstance(user_id, int):
+            raise TypeError('User ID must be an integer')
+        if user_id < 0:
+            raise ValueError('User ID cannot be negative')
+        try:
+            if int(self.query('SELECT uid FROM sessions WHERE text = ?', (user_id,))[0][0]) != user_id:
+                raise PermissionError('User ID does not match that of session owner')
+            self.query('DELETE FROM sessions WHERE text = ?', (refresh_token,))
+        except IndexError:
+            raise ValueError('Token is already invalid or never existed')
 
     def verify(self, access_token: str) -> Optional[int]:
         """Verifies the validity of an access token.
@@ -488,12 +521,11 @@ class Glue:
         except IndexError:
             raise KeyError('Paste was not found')
 
-    def read_paste(self, paste_id: str, user_id: Optional[int] = None) -> dict:
+    def read_paste(self, paste_id: str) -> dict:
         """Reads a paste and it's metadata.
 
         Args:
             paste_id (str): The ID of a paste to read
-            user_id (int): The ID of a user that reads the paste. If None, read-protected files will not be read
         Returns:
             dict: A dictionary of paste content, author, filetype, creation time and a dict of additional metadata.
         Raises:
@@ -507,48 +539,70 @@ class Glue:
         if not fullmatch(r'^[a-zA-Z0-9]+$', paste_id):
             raise ValueError('Paste ID is invalid')
         try:
-            result = self.query(
-                "SELECT author, type, protected, meta, created_at, expires_at FROM pastes WHERE id = ?",
-                (paste_id,),
-                out_dict=True
-            )[0]
-            protected = result.get('protected')
-            if protected:
-                try:
-                    assert self.is_permitted(user_id, READ)
-                except (TypeError, KeyError, AssertionError):
-                    raise PermissionError("You don't have enough rights to do that.")
-            author = result.get('author')
-            filetype = result.get('type')
-            created_at = datetime.strptime(result.get('created_at'), '%Y-%m-%d %H:%M:%S')
-            expires_at = result.get('expires_at')
-            meta = loads(result.get('meta'))
-            if expires_at and datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S') < datetime.now(UTC):
-                self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
-                remove(path.join(self.filepath, paste_id))
-                raise TimeoutError('Paste expired')
-            if not protected:
+            if self.authorized:
+                result = self.query(
+                    'SELECT author, type, protected, meta, created_at, expires_at FROM pastes WHERE id = ?',
+                    (paste_id,),
+                    out_dict=True
+                )[0]
+                protected = result.get('protected')
+                author = result.get('author')
+                filetype = result.get('type')
+                created_at = datetime.strptime(result.get('created_at'), '%Y-%m-%d %H:%M:%S')
+                expires_at = result.get('expires_at')
+                meta = loads(result.get('meta'))
+                if expires_at and datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S') < datetime.now(UTC):
+                    self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
+                    remove(path.join(self.filepath, paste_id))
+                    raise TimeoutError('Paste expired')
+                if not protected:
+                    with open(path.join(self.filepath, paste_id), encoding='utf-8') as file:
+                        content = file.read()
+                else:
+                    # ... probably should decrypt stuff ...
+                    with open(path.join(self.protected_filepath, paste_id), encoding='utf-8') as file:
+                        content = file.read()
+                returnable = {
+                    'content': content,
+                    'type': filetype,
+                    'created_at': created_at,
+                    'meta': meta
+                }
+                if author:
+                    returnable['author'] = author
+                if expires_at:
+                    returnable['expires_at'] = expires_at
+                return returnable
+            else:
+                result = self.query(
+                    'SELECT author, type, meta, created_at, expires_at FROM pastes WHERE id = ?',
+                    (paste_id,),
+                    out_dict=True
+                )[0]
+                author = result.get('author')
+                filetype = result.get('type')
+                created_at = datetime.strptime(result.get('created_at'), '%Y-%m-%d %H:%M:%S')
+                expires_at = result.get('expires_at')
+                meta = loads(result.get('meta'))
+                if expires_at and datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S') < datetime.now(UTC):
+                    self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
+                    remove(path.join(self.filepath, paste_id))
+                    raise TimeoutError('Paste expired')
                 with open(path.join(self.filepath, paste_id), encoding='utf-8') as file:
                     content = file.read()
-            else:
-                # ... probably should decrypt stuff ...
-                with open(path.join(self.protected_filepath, paste_id), encoding='utf-8') as file:
-                    content = file.read()
-            returnable = {
-                'content': content,
-                'type': filetype,
-                'created_at': created_at,
-                'meta': meta
-            }
-            if author:
-                returnable['author'] = author
-            if expires_at:
-                returnable['expires_at'] = expires_at
-            return returnable
+                returnable = {
+                    'content': content,
+                    'type': filetype,
+                    'created_at': created_at,
+                    'meta': meta
+                }
+                if author:
+                    returnable['author'] = author
+                if expires_at:
+                    returnable['expires_at'] = expires_at
+                return returnable
         except (IndexError, FileNotFoundError):
             raise KeyError('The paste was not found')
-        except TimeoutError as e:
-            raise KeyError(e)
 
     def read_paste_raw(self, paste_id: str) -> str:
         """Reads a paste content. Will not read protected pastes.
@@ -594,7 +648,7 @@ class Glue:
         author = None
         if sign_author:
             try:
-                author = db.query('SELECT username FROM users WHERE id = ?', (uid,))[0][0]
+                author = self.query('SELECT username FROM users WHERE id = ?', (uid,))[0][0]
             except IndexError:
                 raise KeyError('User was not found')
         filetype = meta.get('type')
@@ -628,197 +682,235 @@ class Glue:
             RuntimeError: If performing cleanup failed
         """
         try:
-            db.query("DELETE FROM sessions WHERE expires_at < datetime('now')")
-            files = db.query("SELECT id, protected FROM pastes WHERE expires_at < datetime('now')")
+            self.query("DELETE FROM sessions WHERE expires_at < datetime('now')")
+            files = self.query("SELECT id, protected FROM pastes WHERE expires_at < datetime('now')")
             if files:
                 for file_id, protected in map(lambda i: i[0], files):
                     if protected:
                         remove(path.join(self.protected_filepath, file_id))
                     else:
                         remove(path.join(self.filepath, file_id))
-            db.query("DELETE FROM pastes WHERE expires_at < datetime('now')")
+            self.query("DELETE FROM pastes WHERE expires_at < datetime('now')")
         except (OperationalError, FileNotFoundError, PermissionError):
             raise RuntimeError('SQL querying failed')
 
 
-app = Flask(__name__)
+class API:
+    def __init__(self, db: Glue, authorized: bool = False):
+        self.db = db
+        self.authorized = authorized
 
+    def require_auth(self, f: Callable) -> Callable:
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not self.authorized:
+                return f(user_id=None, *args, **kwargs)
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                abort(HTTPStatus.UNAUTHORIZED, description='Authentication header is missing')
+            parts = auth_header.split()
+            if len(parts) != 2 or parts[0].lower() != 'bearer':
+                abort(HTTPStatus.UNAUTHORIZED, description='Invalid authentication scheme. Use Bearer token')
+            token = parts[1]
+            try:
+                uid = self.db.verify(token)
+                if not uid:
+                    abort(HTTPStatus.UNAUTHORIZED, description='Invalid or expired token')
+                return f(user_id=uid, *args, **kwargs)
+            except TypeError as e:
+                abort(HTTPStatus.BAD_REQUEST, description=f'Invalid token format {e}')
+        return decorated
 
-def require_auth(f: Callable) -> Callable:
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            abort(HTTPStatus.UNAUTHORIZED, description='Authentication header is missing')
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            abort(HTTPStatus.UNAUTHORIZED, description='Invalid authentication scheme. Use Bearer token')
-        token = parts[1]
+    def optional_auth(self, f: Callable) -> Callable:
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if not self.authorized:
+                return f(user_id=None, *args, **kwargs)
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return f(user_id=None, *args, **kwargs)
+            parts = auth_header.split()
+            if len(parts) != 2 or parts[0].lower() != 'bearer':
+                abort(HTTPStatus.UNAUTHORIZED, description='Invalid authentication scheme. Use Bearer token')
+            token = parts[1]
+            try:
+                uid = self.db.verify(token)
+                if not uid:
+                    abort(HTTPStatus.UNAUTHORIZED, description='Invalid or expired token')
+                return f(user_id=uid, *args, **kwargs)
+            except TypeError as e:
+                abort(HTTPStatus.BAD_REQUEST, description=f'Invalid token format {e}')
+
+        return decorated
+
+    def login(self):
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        remember = data.get('remember')
+        if not username or not password:
+            abort(HTTPStatus.BAD_REQUEST, description='Credentials are missing')
         try:
-            uid = db.verify(token)
-            if not uid:
-                abort(HTTPStatus.UNAUTHORIZED, description='Invalid or expired token')
-            return f(user_id=uid, *args, **kwargs)
-        except TypeError as e:
-            abort(HTTPStatus.BAD_REQUEST, description=f'Invalid token format {e}')
-    return decorated
-
-
-def optional_auth(f: Callable) -> Callable:
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return f(user_id=None, *args, **kwargs)
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            abort(HTTPStatus.UNAUTHORIZED, description='Invalid authentication scheme. Use Bearer token')
-        token = parts[1]
-        try:
-            uid = db.verify(token)
-            if not uid:
-                abort(HTTPStatus.UNAUTHORIZED, description='Invalid or expired token')
-            return f(user_id=uid, *args, **kwargs)
-        except TypeError as e:
-            abort(HTTPStatus.BAD_REQUEST, description=f'Invalid token format {e}')
-
-    return decorated
-
-
-@app.post('/login')
-def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    remember = data.get('remember')
-    if not username or not password:
-        abort(HTTPStatus.BAD_REQUEST, description='Credentials are missing')
-    try:
-        user_id, refresh_token, access_token = db.login(username, password, bool(remember))
-        returnable = {
-            'user_id': user_id,
-            'access_token': access_token,
-            'refresh_token': refresh_token
-        }
-        return Response(dumps(returnable), status=200)
-    except TypeError:
-        abort(HTTPStatus.BAD_REQUEST, description='Credentials are invalid')
-    except ValueError:
-        abort(HTTPStatus.BAD_REQUEST, description='Credentials are incorrect')
-    except KeyError:
-        abort(HTTPStatus.BAD_REQUEST, description='User not found')
-
-
-@app.post('/refresh')
-def refresh():
-    refresh_token = request.cookies.get('refreshToken')
-    if refresh_token:
-        try:
-            access_token = db.refresh_access(refresh_token)
-            return Response(dumps({'access_token': access_token, 'refresh_token': refresh_token}), 200)
-        except (TypeError, ValueError):
-            abort(HTTPStatus.UNAUTHORIZED, description='Refresh token is invalid or expired')
-    abort(HTTPStatus.BAD_REQUEST, description='Refresh token missing')
-
-
-@app.post('/register')
-@require_auth
-def register(user_id):
-    try:
-        if not db.is_permitted(user_id, ADMIN):
-            abort(HTTPStatus.UNAUTHORIZED, description="You don't have enough rights to do that.")
-    except (KeyError, TypeError, ValueError):
-        abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
-    privileges = data.get('permissions')
-    try:
-        uid = db.register_user(username, password, privileges)
-        print(uid)
-        return Response(dumps({'uid': uid}), 200)
-    except (TypeError, ValueError) as e:
-        abort(HTTPStatus.BAD_REQUEST, description=f'Credentials are invalid: {e}')
-    except RuntimeError:
-        abort(HTTPStatus.CONFLICT, description='User already exists')
-
-
-@app.get('/raw')
-def fetch_raw():
-    paste_id = request.args.get('paste_id')
-    if paste_id:
-        try:
-            return Response(db.read_paste_raw(paste_id), 200)
-        except FileNotFoundError:
-            abort(HTTPStatus.NOT_FOUND, description='Paste was not found')
-        except (ValueError, TypeError):
-            abort(HTTPStatus.BAD_REQUEST, description='Paste ID is invalid')
-    abort(HTTPStatus.BAD_REQUEST, description='Paste ID missing')
-
-
-@app.get('/fetch')
-@optional_auth
-def fetch(user_id):
-    paste_id = request.args.get('paste_id')
-    if paste_id:
-        try:
-            return Response(dumps(db.read_paste(paste_id, user_id)))
-        except PermissionError:
-            abort(HTTPStatus.FORBIDDEN, description='You have no rights to read that.')
+            user_id, refresh_token, access_token = self.db.login(username, password, bool(remember))
+            returnable = {
+                'user_id': user_id,
+                'access_token': access_token,
+                'refresh_token': refresh_token
+            }
+            return Response(dumps(returnable), status=200)
+        except TypeError:
+            abort(HTTPStatus.BAD_REQUEST, description='Credentials are invalid')
+        except ValueError:
+            abort(HTTPStatus.BAD_REQUEST, description='Credentials are incorrect')
         except KeyError:
-            abort(HTTPStatus.NOT_FOUND, description='Paste was not found')
+            abort(HTTPStatus.BAD_REQUEST, description='User not found')
+
+    def refresh(self):
+        refresh_token = request.cookies.get('refreshToken') or request.get_json().get('refresh_token')  # CHANGE!
+        if refresh_token:
+            try:
+                access_token = self.db.refresh_access(refresh_token)
+                return Response(dumps({'access_token': access_token, 'refresh_token': refresh_token}), 200)
+            except (TypeError, ValueError):
+                abort(HTTPStatus.UNAUTHORIZED, description='Refresh token is invalid or expired')
+        abort(HTTPStatus.BAD_REQUEST, description='Refresh token missing')
+
+    @require_auth
+    def register(self, user_id):
+        try:
+            if not self.db.is_permitted(user_id, ADMIN):
+                abort(HTTPStatus.UNAUTHORIZED, description="You don't have enough rights to do that.")
+        except (KeyError, TypeError, ValueError):
+            abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        privileges = data.get('permissions')
+        try:
+            uid = self.db.register_user(username, password, privileges)
+            print(uid)
+            return Response(dumps({'uid': uid}), 200)
+        except (TypeError, ValueError) as e:
+            abort(HTTPStatus.BAD_REQUEST, description=f'Credentials are invalid: {e}')
+        except RuntimeError:
+            abort(HTTPStatus.CONFLICT, description='User already exists')
+
+    @require_auth
+    def logout(self, user_id):
+        data = request.get_json()
+        refresh_token = data.get('refresh_token')
+        if not refresh_token:
+            abort(HTTPStatus.BAD_REQUEST, description='No session to log out of is supplied')
+        try:
+            self.db.logout(refresh_token, user_id)
         except (TypeError, ValueError):
-            abort(HTTPStatus.BAD_REQUEST, description='Paste ID is invalid')
-    abort(HTTPStatus.BAD_REQUEST, description='Paste ID missing')
+            abort(HTTPStatus.BAD_REQUEST, description='Invalid supplied session token')
+        except PermissionError:
+            abort(HTTPStatus.BAD_REQUEST, description='Error happened when processing logout')
+
+    def fetch_raw(self):
+        paste_id = request.args.get('paste_id')
+        if paste_id:
+            try:
+                return Response(self.db.read_paste_raw(paste_id), 200)
+            except FileNotFoundError:
+                abort(HTTPStatus.NOT_FOUND, description='Paste was not found')
+            except (ValueError, TypeError):
+                abort(HTTPStatus.BAD_REQUEST, description='Paste ID is invalid')
+        abort(HTTPStatus.BAD_REQUEST, description='Paste ID missing')
+
+    @optional_auth
+    def fetch(self, user_id):
+        paste_id = request.args.get('paste_id')
+        if paste_id:
+            try:
+                if self.authorized and self.db.is_protected(paste_id):
+                    if user_id is None:
+                        abort(HTTPStatus.FORBIDDEN, description='You must authorize to read that.')
+                    assert self.db.is_permitted(user_id, READ)
+                return Response(dumps(self.db.read_paste(paste_id)))
+            except AssertionError:
+                abort(HTTPStatus.FORBIDDEN, description='You have no rights to read that.')
+            except KeyError:
+                abort(HTTPStatus.NOT_FOUND, description='Paste was not found')
+            except (TypeError, ValueError):
+                abort(HTTPStatus.BAD_REQUEST, description='Paste ID is invalid')
+        abort(HTTPStatus.BAD_REQUEST, description='Paste ID missing')
+
+    @require_auth
+    def create(self, user_id):
+        data = request.get_json()
+        content = data.get('content')
+        del data['content']
+        try:
+            if not self.authorized or self.db.is_permitted(user_id, WRITE):
+                return Response(self.db.insert_paste(content, data, user_id))
+            abort(HTTPStatus.FORBIDDEN, description='You have no rights to write that.')
+        except (ValueError, TypeError):
+            abort(HTTPStatus.BAD_REQUEST, description='Paste content or metadata is malformed')
+        except RuntimeError:
+            abort(HTTPStatus.INTERNAL_SERVER_ERROR, description='Server failed generating unique link')
+        except KeyError:
+            abort(HTTPStatus.UNAUTHORIZED, description='Malformed authentication token')
+
+    @require_auth
+    def cleanup(self, user_id):
+        try:
+            if not self.authorized or self.db.is_permitted(user_id, ADMIN):
+                self.db.cleanup()
+        except RuntimeError:
+            abort(HTTPStatus.INTERNAL_SERVER_ERROR, description="Cleanup failed")
+        except (KeyError, ValueError, TypeError):
+            abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
 
 
-@app.post('/create')
-@require_auth
-def create(user_id):
-    data = request.get_json()
-    content = data.get('content')
-    del data['content']
-    try:
-        if db.is_permitted(user_id, WRITE):
-            return Response(db.insert_paste(content, data, user_id))
-        abort(HTTPStatus.FORBIDDEN, description='You have no rights to write that.')
-    except (ValueError, TypeError):
-        abort(HTTPStatus.BAD_REQUEST, description='Paste content or metadata is malformed')
-    except RuntimeError:
-        abort(HTTPStatus.INTERNAL_SERVER_ERROR, description='Server failed generating unique link')
-    except KeyError:
-        abort(HTTPStatus.UNAUTHORIZED, description='Malformed authentication token')
+def init() -> Flask:
+    app = Flask(__name__)
 
-@app.post('/cleanup')
-@require_auth
-def cleanup(user_id):
-    try:
-        if not db.is_permitted(user_id, ADMIN):
-            abort(HTTPStatus.UNAUTHORIZED, description="You don't have enough rights to do that.")
-    except (KeyError, ValueError, TypeError):
-        abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
-    try:
-        db.cleanup()
-    except RuntimeError:
-        abort(HTTPStatus.INTERNAL_SERVER_ERROR, description="Cleanup failed")
+    def add_route(url: str, handler: Callable, methods: list[str]):
+        if methods is None:
+            methods = list('GET')
+        app.add_url_rule(url, view_func=handler, methods=methods)
+
+    load_dotenv()
+
+    def getvar(varname: str, default: Any, desc_default: str, func: Callable = None) -> Any:
+        var = environ.get(varname)
+        if var is None:
+            print(f'{varname} is not set. {desc_default}')
+            return default
+        if func:
+            return func(var)
+        return var
+
+    authorized = getvar('AUTHORIZED', True, 'Assuming TRUE.')
+    pkey = getvar('AUTH_SECRET', token_bytes(32), 'Generating a one-time use secret...', b64decode)
+    db_path = getvar('DB_PATH', 'file::memory:?cache=shared', 'Loading in memory...')
+    pastes_path = getvar('PASTES_PATH', './pastes', 'Assuming ./pastes.')
+    protected_path = getvar('PROTECTED_PATH', './protected', 'Assuming ./protected.')
+    # anonymous = getvar('ANONYMOUS', False, 'Assuming FALSE.')
+
+    db = Glue(
+        paseto_key=pkey,
+        db_path=db_path,
+        pastes_path=pastes_path,
+        protected_path=protected_path,
+        authorized=authorized)
+    api = API(db=db, authorized=authorized)
+
+    add_route('/fetch', api.fetch, methods=['GET'])
+    add_route('/raw', api.fetch_raw, methods=['GET'])
+    add_route('/paste', api.create, methods=['POST'])
+    add_route('/cleanup', api.cleanup, methods=['POST'])
+
+    if authorized:
+        add_route('/login', api.login, methods=['POST'])
+        add_route('/register', api.register, methods=['POST'])
+        add_route('/refresh', api.refresh, methods=['POST'])
+        add_route('/logout', api.logout, methods=['POST'])
+    return app
 
 
 if __name__ == '__main__':
-    load_dotenv()
-    pkey = environ.get('PASETO_SECRET')
-    if not pkey:
-        print('No PASETO secret set. Generating...')
-        pkey = token_bytes(32)
-    else:
-        pkey = b64decode(pkey)
-    dbpath = environ.get('DB_PATH')
-    if not dbpath:
-        print('No DB path set. Loading in memory...')
-        db = Glue(paseto_key=pkey)
-    else:
-        db = Glue(db_path=dbpath, paseto_key=pkey)
-    no_users = db.query("SELECT id FROM users")
-    if not no_users:
-        db.register_user('admin', 'admin', 31)
-        print('Created default user admin:admin. Please change the password after logging in.')
-    app.run(port=8888, host="0.0.0.0", debug=bool(environ.get('DEBUG')))
+    print('Running in a low-efficiency insecure manual debug mode. Use WSGI server like gunicorn in production.')
+    init().run(port=8888, host='0.0.0.0', debug=True)
