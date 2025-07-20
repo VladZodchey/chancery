@@ -1,5 +1,19 @@
 stages:
+  - lint
   - build
+
+lint-python:
+  stage: lint
+  image: python:3.12-alpine
+  before_script:
+    - pip install --cache-dir=.cache/pip ruff
+  script:
+    - ruff check .
+  only:
+    - main
+    - merge-requests
+  tags:
+    - docker
 
 build-docker:
   stage: build

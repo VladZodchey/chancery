@@ -20,3 +20,37 @@ dependencies = [
 dev = [
     "ruff>=0.12.3",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "A",    # flake8-builtins: Avoid shadowing Python builtins
+    "B",    # flake8-bugbear: Catch common bugs (e.g., mutable default arguments)
+    "C4",   # flake8-comprehensions: Improve comprehension and generator usage
+    "D",    # pydocstyle: Enforce docstring conventions (configured below to avoid conflicts)
+    "E",    # pycodestyle errors: Syntax and basic style errors
+    "F",    # pyflakes: Logical errors (e.g., unused imports, undefined variables)
+    "I",    # isort: Enforce import sorting
+    "N",    # pep8-naming: Enforce naming conventions
+    "PL",   # pylint: Additional static analysis (e.g., too-many-branches)
+    "PT",   # flake8-pytest-style: Enforce pytest best practices
+    "RET",  # flake8-return: Improve return statement consistency
+    "RUF",  # Ruff-specific rules: Additional optimizations and best practices
+    "S",    # flake8-bandit: Basic security checks
+    "SIM",  # flake8-simplify: Simplify code patterns
+    "T20",  # flake8-print: Avoid print statements (unless debugging)
+    "UP",   # pyupgrade: Enforce modern Python syntax
+]
+ignore = [
+    "D203",  # Conflicts with D211 (class docstring placement)
+    "D212",  # Conflicts with D213 (multi-line docstring summary)
+    "D401",
+    "T20",   # Print statement: Haven't configured logging yet
+    "RET503" # This check combined with Flask's abort() method makes a vicious cycle of unsatisfaction.
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
