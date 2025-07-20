@@ -48,7 +48,6 @@ ignore = [
     "D203",  # Conflicts with D211 (class docstring placement)
     "D212",  # Conflicts with D213 (multi-line docstring summary)
     "D401",
-    "T20",   # Print statement: Haven't configured logging yet
     "RET503" # This check combined with Flask's abort() method makes a vicious cycle of unsatisfaction.
 ]
 
