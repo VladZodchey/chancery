@@ -7,8 +7,6 @@ RUN pip install uv
 COPY pyproject.toml uv.lock /app/
 RUN uv sync --frozen
 
-RUN uv pip install gunicorn
-
 
 FROM python:3.12-alpine
 
