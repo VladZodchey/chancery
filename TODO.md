@@ -1,4 +1,14 @@
 - [ ] Implement multilingual docs/readme files
 - [ ] Write unittests for API and DB
-- [ ] Implement CI/CD pipeline for building
+- [x] Implement CI/CD pipeline for building
 - [ ] Write actual docs
+- [ ] Limit concurrent sessions (per user) to 5
+- [ ] When enabling CORS, add option to allow user registration only to LAN
+- [ ] Encrypt read-protected files
+- [ ] Implement API endpoints (including rewriting db.read_paste security)
+- [ ] Add coherent logging
+- [ ] Add a non-authenticated mode (for local use)
+- [ ] Add cooldowns to endpoints
+- [ ] Pass refresh token as a cookie, not as a body property
+- [ ] Add password protection to pastes, implement setting expiration
+- [ ] Add resource deletion routes
