@@ -4,7 +4,7 @@
 Ever wanted a self-hosted text file storage like Pastebin? No? Well, I did.
 
 This piece has these neat features:
-- Paste metadata, such as it's filetype, author, creation type, additional custom fields.
+- Paste metadata, such as its filetype, author, creation type, additional custom fields.
 - User/role system for fine-grained access control
 - Read-protected (private) pastes
 - ...and more to come!
