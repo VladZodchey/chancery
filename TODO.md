@@ -6,7 +6,7 @@
 - [ ] When enabling CORS, add option to allow user registration only to LAN
 - [ ] Encrypt read-protected files
 - [ ] Implement API endpoints (including rewriting db.read_paste security)
-- [ ] Add coherent logging
+- [x] Add coherent logging
 - [ ] Add a non-authenticated mode (for local use)
 - [ ] Add cooldowns to endpoints
 - [ ] Pass refresh token as a cookie, not as a body property
