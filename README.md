@@ -17,3 +17,16 @@ A ton of essential features are not yet implemented.
 
 > [!NOTE]
 > You might see GitLab-related config files. Do not worry! This repo is mirrored from a local GitLab instance.
+
+## Running Chancery via Docker
+```commandline
+docker run vladzodchey/chancery
+```
+
+## Building from source
+```commandline
+git clone https://github.com/VladZodchey/chancery.git ./chancery
+cd ./chancery
+docker build -t chancery .
+docker run chancery
+```
