@@ -29,12 +29,15 @@ build-docker:
     IMAGE_NAME: $CI_REGISTRY/$CI_PROJECT_PATH:$CI_COMMIT_REF_SLUG
     DOCKER_HUB_IMAGE: vladzodchey/$CI_PROJECT_NAME:$CI_COMMIT_REF_SLUG
     DOCKER_CLI_EXPERIMENTAL: enabled
+    DOCKER_HOST: tcp://docker:2375
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
     - echo "$DOCKER_HUB_PASSWORD" | docker login -u "vladzodchey" --password-stdin
-    - docker buildx create --use --name multiarch-builder
+    - docker context create dind-context --docker "host=$DOCKER_HOST"
+    - docker buildx create --use --name multiarch-builder dind-context
+    - docker buildx inspect --bootstrap
   script:
-    - docker buildx build --platform linux/amd64 -t $IMAGE_NAME -t $DOCKER_HUB_IMAGE --push .
+    - docker buildx build --platform linux/amd64,linux/arm64 -t $IMAGE_NAME -t $DOCKER_HUB_IMAGE --push .
   only:
     - main
   tags:
