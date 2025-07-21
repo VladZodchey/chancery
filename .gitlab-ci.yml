@@ -26,7 +26,7 @@ build-docker:
     DOCKER_HUB_IMAGE: vladzodchey/$CI_PROJECT_NAME:$CI_COMMIT_REF_SLUG
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
-    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "<your-dockerhub-username>" --password-stdin
+    - echo "$DOCKER_HUB_PASSWORD" | docker login -u "vladzodchey" --password-stdin
   script:
     - docker build -t $IMAGE_NAME .
     - docker push $IMAGE_NAME
