@@ -4,7 +4,13 @@ stages:
 
 lint-python:
   stage: lint
-  image: ghcr.io/astral-sh/ruff:0.12.4
+  image: python:3.12-alpine
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-pip-cache
+    paths:
+      - .cache/pip
+  before_script:
+    - pip install --cache-dir=.cache/pip ruff
   script:
     - ruff check --output-format=gitlab .
   only:
