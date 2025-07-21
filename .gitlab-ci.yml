@@ -4,11 +4,9 @@ stages:
 
 lint-python:
   stage: lint
-  image: python:3.12-alpine
-  before_script:
-    - pip install --cache-dir=.cache/pip ruff
+  image: registry.gitlab.com/pipeline-components/ruff:latest
   script:
-    - ruff check .
+    - ruff check --output-format=gitlab .
   only:
     - main
     - merge-requests
@@ -30,6 +28,7 @@ build-docker:
   script:
     - docker build -t $IMAGE_NAME .
     - docker push $IMAGE_NAME
+    - docker tag $IMAGE_NAME $DOCKER_HUB_IMAGE
     - docker push $DOCKER_HUB_IMAGE
   only:
     - main
