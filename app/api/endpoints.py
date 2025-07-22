@@ -4,6 +4,7 @@ This module provides:
 - API: a class of all endpoints
 - register_endpoints: a function that registers endpoints onto an app and assigns a DB glue
 """
+
 import logging
 from http import HTTPStatus
 
@@ -17,6 +18,7 @@ from . import api_bp
 
 class API:
     """The dome API class to store endpoint methods + DB."""
+
     def __init__(self, db: Glue, authorized: bool = False):
         """Populates variables that are used by endpoints.
 
@@ -42,9 +44,7 @@ class API:
         if not username or not password:
             abort(HTTPStatus.BAD_REQUEST, description="Credentials are missing")
         try:
-            user_id, refresh_token, access_token = self.db.login(
-                username, password, remember
-            )
+            user_id, refresh_token, access_token = self.db.login(username, password, remember)
             returnable = {
                 "user_id": user_id,
                 "access_token": access_token,
@@ -68,9 +68,7 @@ class API:
         if refresh_token:
             try:
                 access_token = self.db.refresh_access(refresh_token)
-                return jsonify(
-                        {"access_token": access_token, "refresh_token": refresh_token}
-                )
+                return jsonify({"access_token": access_token, "refresh_token": refresh_token})
             except (TypeError, ValueError):
                 abort(
                     HTTPStatus.UNAUTHORIZED,
@@ -153,9 +151,7 @@ class API:
                         raise PermissionError("You have no rights to read that.")
                 return jsonify(self.db.read_paste(paste_id))
             except PermissionError:
-                abort(
-                    HTTPStatus.FORBIDDEN, description="You have no rights to read that."
-                )
+                abort(HTTPStatus.FORBIDDEN, description="You have no rights to read that.")
             except KeyError:
                 abort(HTTPStatus.NOT_FOUND, description="Paste was not found")
             except (TypeError, ValueError):
@@ -209,7 +205,6 @@ class API:
         """,
             200,
         )
-
 
 
 def register_endpoints(app, db):

@@ -1,13 +1,12 @@
 """Common constants for the project."""
+
 NONE = 0
 READ = 1 << 0
 WRITE = 1 << 1
 DELETE = 1 << 2
 API = 1 << 3
 ADMIN = 1 << 4
-VALIDATION_MASK = (
-    READ | WRITE | DELETE | API | ADMIN
-)
+VALIDATION_MASK = READ | WRITE | DELETE | API | ADMIN
 
 ID_CHARACTER_SET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 ID_LENGTH = 7

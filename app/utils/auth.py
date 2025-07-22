@@ -4,6 +4,7 @@ This module provides:
 - require_auth: a decorator that requires and checks a Bearer token, unless authorized is False
 - optional_auth: a decorator that checks a Bearer token, unless authorized is False
 """
+
 from collections.abc import Callable
 from functools import wraps
 from http import HTTPStatus
@@ -16,15 +17,14 @@ def require_auth(f: Callable) -> Callable:
 
     If `authorized` is `False`, skips checks and passes ``None`` as ``user_id``.
     """
+
     @wraps(f)
     def decorated(self, *_args, **kwargs):
         if not self.authorized:
             return f(self, user_id=None, **kwargs)
         auth_header = request.headers.get("Authorization")
         if not auth_header:
-            abort(
-                HTTPStatus.UNAUTHORIZED, description="Authentication header is missing"
-            )
+            abort(HTTPStatus.UNAUTHORIZED, description="Authentication header is missing")
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != "bearer":  # noqa PLR2004
             abort(
@@ -48,6 +48,7 @@ def optional_auth(f: Callable) -> Callable:
 
     Passes ``None`` if no token was given or ``authorized`` is ``False``.
     """
+
     @wraps(f)
     def decorated(self, *_args, **kwargs):
         if not self.db.authorized:

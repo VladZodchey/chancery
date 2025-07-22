@@ -3,6 +3,7 @@
 This module provides:
 - create_app: a function to get a Flask considering a dev/prod environment
 """
+
 import time
 
 from flask import Flask, g, request

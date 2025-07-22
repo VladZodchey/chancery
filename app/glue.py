@@ -3,6 +3,7 @@
 This module provides:
 - Glue: a class of DB glue to perform authentication and actual paste processing
 """
+
 import logging
 from datetime import UTC, datetime, timedelta
 from json import dumps, loads
@@ -15,13 +16,13 @@ from bcrypt import gensalt, hashpw
 from pyseto import DecryptError, Key, Paseto, VerifyError
 
 from .constants import (
+    CONCURRENT_SESSIONS,
     ID_CHARACTER_SET,
     ID_LENGTH,
     MAX_PASSWORD_LENGTH,
     MAX_USERNAME_LENGTH,
     MIN_CRED_LENGTH,
     VALIDATION_MASK,
-    CONCURRENT_SESSIONS
 )
 
 
@@ -56,9 +57,7 @@ class Glue:
                 New pastes will be created in the same directory as the process."""
             )
         if not protected_path and authorized:
-            self.logger.warning(
-                "Warning: the path to protected pastes is empty."
-            )
+            self.logger.warning("Warning: the path to protected pastes is empty.")
         self.dbpath = db_path
         self.filepath = pastes_path
         self.protected_filepath = protected_path
@@ -160,9 +159,7 @@ class Glue:
         if privilege < 0:
             raise TypeError("Privileges cannot be negative")
         if privilege & VALIDATION_MASK != privilege:
-            raise ValueError(
-                "Privileges integer must be a bitwise OR of individual permissions"
-            )
+            raise ValueError("Privileges integer must be a bitwise OR of individual permissions")
         try:
             real = self.query("SELECT privileges FROM users WHERE id = ?", (user_id,))
             return real[0][0] & privilege == privilege
@@ -301,9 +298,7 @@ class Glue:
         if privileges < 0:
             raise ValueError("Privileges integer cannot be negative")
         if privileges & VALIDATION_MASK != privileges:
-            raise ValueError(
-                "Privileges integer must be a bitwise OR of individual permissions"
-            )
+            raise ValueError("Privileges integer must be a bitwise OR of individual permissions")
         salt = self.salt()
         hashed = self.hash(password, salt)
         try:
@@ -355,9 +350,7 @@ class Glue:
             if not self.compare(true_password, password):
                 raise ValueError("Incorrect credentials")
             if remember:
-                session_count = self.query(
-                    "SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,)
-                )[0]
+                session_count = self.query("SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,))[0]
                 if session_count > CONCURRENT_SESSIONS:
                     raise RuntimeError("Concurrent session count exceeds limit")
                 refresh_token = token_urlsafe(64)
@@ -443,11 +436,7 @@ class Glue:
             raise ValueError("User ID cannot be negative")
         try:
             if (
-                int(
-                    self.query("SELECT uid FROM sessions WHERE text = ?", (user_id,))[
-                        0
-                    ][0]
-                )
+                int(self.query("SELECT uid FROM sessions WHERE text = ?", (user_id,))[0][0])
                 != user_id
             ):
                 raise PermissionError("User ID does not match that of session owner")
@@ -500,9 +489,7 @@ class Glue:
         if not isinstance(new_privileges, int):
             raise TypeError("Privileges level must be an integer")
         if new_privileges & VALIDATION_MASK != new_privileges:
-            raise ValueError(
-                "Privileges integer must be a bitwise OR of individual permissions"
-            )
+            raise ValueError("Privileges integer must be a bitwise OR of individual permissions")
         if user_id < 0:
             raise ValueError("User ID cannot be negative")
         if new_privileges < 0:
@@ -548,9 +535,7 @@ class Glue:
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
         try:
-            return self.query("SELECT protected FROM pastes WHERE id = ?", (paste_id,))[
-                0
-            ][0]
+            return self.query("SELECT protected FROM pastes WHERE id = ?", (paste_id,))[0][0]
         except IndexError as e:
             raise KeyError("Paste was not found") from e
 
@@ -585,21 +570,17 @@ class Glue:
                 protected = result.get("protected")
                 author = result.get("author")
                 filetype = result.get("type")
-                created_at = datetime.strptime(
-                    result.get("created_at"), "%Y-%m-%d %H:%M:%S"
-                )
+                created_at = datetime.strptime(result.get("created_at"), "%Y-%m-%d %H:%M:%S")
                 expires_at = result.get("expires_at")
                 meta = loads(result.get("meta"))
-                if expires_at and datetime.strptime(
-                    expires_at, "%Y-%m-%d %H:%M:%S"
-                ) < datetime.now(UTC):
+                if expires_at and datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S") < datetime.now(
+                    UTC
+                ):
                     self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
                     remove(path.join(self.filepath, paste_id))
                     raise TimeoutError("Paste expired")
                 if not protected:
-                    with open(
-                        path.join(self.filepath, paste_id), encoding="utf-8"
-                    ) as file:
+                    with open(path.join(self.filepath, paste_id), encoding="utf-8") as file:
                         content = file.read()
                 else:
                     # ... probably should decrypt stuff ...
@@ -627,14 +608,12 @@ class Glue:
             )[0]
             author = result.get("author")
             filetype = result.get("type")
-            created_at = datetime.strptime(
-                result.get("created_at"), "%Y-%m-%d %H:%M:%S"
-            )
+            created_at = datetime.strptime(result.get("created_at"), "%Y-%m-%d %H:%M:%S")
             expires_at = result.get("expires_at")
             meta = loads(result.get("meta"))
-            if expires_at and datetime.strptime(
-                expires_at, "%Y-%m-%d %H:%M:%S"
-            ) < datetime.now(UTC):
+            if expires_at and datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S") < datetime.now(
+                UTC
+            ):
                 self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
                 remove(path.join(self.filepath, paste_id))
                 raise TimeoutError("Paste expired")
@@ -677,7 +656,7 @@ class Glue:
         except FileNotFoundError:
             raise FileNotFoundError(
                 "Paste was not found"
-            ) from None # sanitizing internal error for logging
+            ) from None  # sanitizing internal error for logging
 
     def insert_paste(self, content: str, meta: dict, uid: int) -> str:
         """Creates a paste with metadata and produces a unique ID.
@@ -703,9 +682,7 @@ class Glue:
         author = None
         if sign_author:
             try:
-                author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[
-                    0
-                ][0]
+                author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[0][0]
             except IndexError as e:
                 raise KeyError("User was not found") from e
         filetype = meta.get("type")
@@ -728,9 +705,7 @@ class Glue:
             (author, filetype, protected, dumps(meta), expires_at),
         )
         if not protected:
-            with open(
-                path.join(self.filepath, paste_id), mode="w", encoding="utf-8"
-            ) as file:
+            with open(path.join(self.filepath, paste_id), mode="w", encoding="utf-8") as file:
                 file.write(content)
         else:
             # ... probably should encrypt stuff ...
