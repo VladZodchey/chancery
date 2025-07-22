@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 authors = [{ name = "vladzodchey", email = "vlad@videvsys.ru" }]
 maintainers = [{ name = "vladzodchey", email = "vlad@videvsys.ru" }]
 readme = "README.md"
-license = "MIT"
+license = "MIT AND (Apache-2.0 OR BSD-2-Clause)"
 dependencies = [
     "bcrypt>=4.3.0",
     "dotenv>=0.9.9",
