@@ -1,4 +1,4 @@
-"""Common constants to project."""
+"""Common constants for the project."""
 NONE = 0
 READ = 1 << 0
 WRITE = 1 << 1
@@ -14,3 +14,4 @@ ID_LENGTH = 7
 MAX_USERNAME_LENGTH = 24
 MAX_PASSWORD_LENGTH = 36
 MIN_CRED_LENGTH = 4
+CONCURRENT_SESSIONS = 5

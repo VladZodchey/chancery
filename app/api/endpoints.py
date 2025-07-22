@@ -57,6 +57,8 @@ class API:
             abort(HTTPStatus.BAD_REQUEST, description="Credentials are incorrect")
         except KeyError:
             abort(HTTPStatus.BAD_REQUEST, description="User not found")
+        except RuntimeError:
+            abort(HTTPStatus.TOO_MANY_REQUESTS, description="Too many sessions at once")
 
     def refresh(self):
         """Generates a new access token using a ``refresh_token`` from JSON body."""

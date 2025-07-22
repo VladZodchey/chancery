@@ -21,6 +21,7 @@ from .constants import (
     MAX_USERNAME_LENGTH,
     MIN_CRED_LENGTH,
     VALIDATION_MASK,
+    CONCURRENT_SESSIONS
 )
 
 
@@ -335,6 +336,7 @@ class Glue:
             TypeError: If some of the arguments are not a string
             ValueError: If credentials are incorrect or invalid
             KeyError: If the user was not found
+            RuntimeError: If the user's concurrent session count exceeds limit
         """
         if not isinstance(username, str):
             raise TypeError("Username must be a string")
@@ -353,6 +355,11 @@ class Glue:
             if not self.compare(true_password, password):
                 raise ValueError("Incorrect credentials")
             if remember:
+                session_count = self.query(
+                    "SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,)
+                )[0]
+                if session_count > CONCURRENT_SESSIONS:
+                    raise RuntimeError("Concurrent session count exceeds limit")
                 refresh_token = token_urlsafe(64)
                 access_token = self.paseto.encode(
                     self.paseto_key,

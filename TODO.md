@@ -2,7 +2,7 @@
 - [ ] Write unittests for API and DB
 - [x] Implement CI/CD pipeline for building
 - [ ] Write actual docs
-- [ ] Limit concurrent sessions (per user) to 5
+- [x] Limit concurrent sessions (per user) to 5
 - [ ] When enabling CORS, add option to allow user registration only to LAN
 - [ ] Encrypt read-protected files
 - [ ] Implement API endpoints (including rewriting db.read_paste security)
@@ -12,3 +12,4 @@
 - [ ] Pass refresh token as a cookie, not as a body property
 - [ ] Add password protection to pastes, implement setting expiration
 - [ ] Add resource deletion routes
+- [ ] Load certain constants from ENV
