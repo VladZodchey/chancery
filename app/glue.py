@@ -92,6 +92,7 @@ class Glue:
                 );
                 CREATE TABLE IF NOT EXISTS pastes (
                     id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL DEFAULT 'untitled',
                     author TEXT,
                     type TEXT NOT NULL DEFAULT 'txt',
                     protected INTEGER NOT NULL DEFAULT FALSE,
@@ -105,6 +106,7 @@ class Glue:
                 cursor.executescript("""
                     CREATE TABLE IF NOT EXISTS pastes (
                         id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL DEFAULT 'untitled',
                         author TEXT,
                         type TEXT NOT NULL DEFAULT 'txt',
                         meta TEXT NOT NULL DEFAULT '{}',
