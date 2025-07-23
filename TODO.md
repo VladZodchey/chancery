@@ -11,6 +11,6 @@
 - [ ] Add cooldowns to endpoints
 - [ ] Pass refresh token as a cookie, not as a body property
 - [ ] Add password protection to pastes, implement setting expiration
-- [ ] Add resource deletion routes
+- [x] Add resource deletion routes
 - [ ] Load certain constants from ENV
 - [ ] Add user deletion routes
