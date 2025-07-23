@@ -744,6 +744,7 @@ class Glue:
 
         Args:
             paste_id (str): The paste ID.
+
         Returns:
             Nothing.
 

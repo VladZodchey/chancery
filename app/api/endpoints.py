@@ -10,7 +10,7 @@ from http import HTTPStatus
 
 from flask import Response, abort, jsonify, request
 
-from ..constants import ADMIN, READ, WRITE, DELETE
+from ..constants import ADMIN, DELETE, READ, WRITE
 from ..glue import Glue
 from ..utils.auth import optional_auth, require_auth
 from . import api_bp
