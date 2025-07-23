@@ -13,3 +13,4 @@
 - [ ] Add password protection to pastes, implement setting expiration
 - [ ] Add resource deletion routes
 - [ ] Load certain constants from ENV
+- [ ] Add user deletion routes
