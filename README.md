@@ -12,7 +12,8 @@ This piece has these neat features:
 Contributions are welcome!
 I would really appreciate if someone with application security knowledge (and peaceful intent) reviewed the auth thingamabob I made.
 
-> [!WARNING] Please note that this API is still in active pre-release development, things may break, things may change.
+> [!WARNING] 
+> Please note that this API is still in active pre-release development, things may break, things may change.
 > A ton of essential features are not yet implemented.
 
 > [!NOTE]
