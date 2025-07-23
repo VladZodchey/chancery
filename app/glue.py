@@ -738,3 +738,32 @@ class Glue:
             self.query("DELETE FROM pastes WHERE expires_at < datetime('now')")
         except (OperationalError, FileNotFoundError, PermissionError) as e:
             raise RuntimeError("SQL querying failed") from e
+
+    def delete_paste(self, paste_id: str) -> None:
+        """Removes a paste by its ID.
+
+        Args:
+            paste_id (str): The paste ID.
+        Returns:
+            Nothing.
+
+        Raises:
+            KeyError: If paste associated with ID doesn't exist
+            TypeError: If ``paste_id`` is not a string
+            ValueError: If ``paste_id`` is an invalid ID
+        """
+        if not isinstance(paste_id, str):
+            raise TypeError("Paste ID must be a string")
+        if not fullmatch(r"^[a-zA-Z0-9]+$", paste_id):
+            raise ValueError("Paste ID is invalid")
+        try:
+            if self.authorized:
+                protected = self.query(
+                    "DELETE FROM pastes WHERE id = ? RETURNING protected", (paste_id,)
+                )[0][0]
+                remove(path.join(self.protected_filepath if protected else self.filepath, paste_id))
+            else:
+                self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
+                remove(path.join(self.filepath, paste_id))
+        except (FileNotFoundError, IndexError):
+            raise KeyError("Paste does not exists") from None

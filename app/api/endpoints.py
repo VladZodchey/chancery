@@ -10,7 +10,7 @@ from http import HTTPStatus
 
 from flask import Response, abort, jsonify, request
 
-from ..constants import ADMIN, READ, WRITE
+from ..constants import ADMIN, READ, WRITE, DELETE
 from ..glue import Glue
 from ..utils.auth import optional_auth, require_auth
 from . import api_bp
@@ -186,7 +186,7 @@ class API:
 
     @require_auth
     def cleanup(self, user_id):
-        """A clean-up root that removes expired pastes and sessions."""
+        """A clean-up route that removes expired pastes and sessions."""
         try:
             if not self.authorized or self.db.is_permitted(user_id, ADMIN):
                 self.db.cleanup()
@@ -194,6 +194,24 @@ class API:
             abort(HTTPStatus.INTERNAL_SERVER_ERROR, description="Cleanup failed")
         except (KeyError, ValueError, TypeError):
             abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
+
+    @require_auth
+    def delete(self, user_id):
+        """A route to remove a paste under ``paste_id`` JSON body field."""
+        data = request.get_json()
+        paste_id = data.get('paste_id')
+        if paste_id:
+            try:
+                if not self.authorized or self.db.is_permitted(user_id, DELETE):
+                    self.db.delete_paste(paste_id)
+                    return Response(status=HTTPStatus.NO_CONTENT)
+                abort(HTTPStatus.FORBIDDEN, description="You have no rights to do that.")
+            except (ValueError, TypeError):
+                abort(HTTPStatus.BAD_REQUEST, description="paste_id is invalid")
+            except KeyError:
+                abort(HTTPStatus.NOT_FOUND, description="Paste was not found")
+        abort(HTTPStatus.BAD_REQUEST, description="paste_id missing")
+
 
     @staticmethod
     def hello():
