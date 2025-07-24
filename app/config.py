@@ -30,14 +30,12 @@ class DevelopmentConfig(Config):
     """Config class with DEBUG on."""
 
     DEBUG = True
-    LOG_REQUESTS = False
 
 
 class ProductionConfig(Config):
     """Config class with DEBUG off."""
 
     DEBUG = False
-    LOG_REQUESTS = True
 
 
 config = {
