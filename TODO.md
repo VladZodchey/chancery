@@ -7,10 +7,11 @@
 - [ ] Encrypt read-protected files
 - [ ] Implement API endpoints (including rewriting db.read_paste security)
 - [x] Add coherent logging
-- [ ] Add a non-authenticated mode (for local use)
+- [x] Add a non-authenticated mode (for local use)
 - [ ] Add cooldowns to endpoints
 - [ ] Pass refresh token as a cookie, not as a body property
 - [ ] Add password protection to pastes, implement setting expiration
 - [x] Add resource deletion routes
 - [ ] Load certain constants from ENV
 - [ ] Add user deletion routes
+- [ ] Add password change/password recovery
