@@ -51,7 +51,8 @@ class API:
                 "refresh_token": refresh_token,
             }
             return jsonify(returnable)
-        except TypeError:
+        except TypeError as e:
+            self.logger.error(e)
             abort(HTTPStatus.UNPROCESSABLE_ENTITY, description="Credentials are invalid")
         except ValueError:
             abort(HTTPStatus.BAD_REQUEST, description="Credentials are incorrect")

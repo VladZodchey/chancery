@@ -397,7 +397,7 @@ class Glue:
             if not self.compare(true_password, password):
                 raise ValueError("Incorrect credentials")
             if remember:
-                session_count = self.query("SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,))[0]
+                session_count = self.query("SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,))[0][0]
                 if session_count > CONCURRENT_SESSIONS:
                     raise RuntimeError("Concurrent session count exceeds limit")
                 refresh_token = token_urlsafe(64)
@@ -646,7 +646,6 @@ class Glue:
                 if expires_at:
                     returnable["expires_at"] = expires_at
                 return returnable
-            self.logger.debug(paste_id)
             result = self.query(
                 """SELECT author, type, meta, created_at, expires_at 
                 FROM pastes 
@@ -654,7 +653,6 @@ class Glue:
                 (paste_id,),
                 out_dict=True,
             )[0]
-            self.logger.debug("Fetched the record")
             author = result.get("author")
             filetype = result.get("type")
             created_at = datetime.strptime(result.get("created_at"), "%Y-%m-%d %H:%M:%S")
