@@ -5,6 +5,8 @@ This module provides:
 """
 
 from __future__ import annotations
+
+import re
 from typing import Any, Type
 
 import logging
@@ -21,10 +23,10 @@ from pyseto import DecryptError, Key, Paseto, VerifyError
 from .constants import (
     CONCURRENT_SESSIONS,
     ID_CHARACTER_SET,
+    ID_CHARACTER_RE,
     ID_LENGTH,
-    MAX_PASSWORD_LENGTH,
-    MAX_USERNAME_LENGTH,
-    MIN_CRED_LENGTH,
+    USERNAME_RE,
+    PASSWORD_RE,
     VALIDATION_MASK,
 )
 
@@ -118,6 +120,13 @@ class Glue:
                     );
                 """)
             conn.commit()
+            if self.authorized:
+                user_count = self.query("SELECT COUNT(*) FROM users")[0][0]
+                if not user_count:
+                    self.logger.warning(
+                        "No users found. Creating root user admin:admin. Change the password after logging in!"
+                    )
+                    self.register_user("admin", "admin", VALIDATION_MASK)
 
     def query(self, query: str, params: tuple = (), out_dict: bool = False) -> list:
         """Performs a thread-safe query.
@@ -314,7 +323,7 @@ class Glue:
         Args:
             username (str): The login. <24 >=4 characters
             password (str): The password. <36 >=4 characters
-            privileges (int): A custom TypedClass of bools of user's permissions.
+            privileges (int): An integer of user's permissions.
 
         Returns:
             int: New user ID.
@@ -329,14 +338,10 @@ class Glue:
             raise TypeError("Username must be a string")
         if not isinstance(password, str):
             raise TypeError("Password must be a string")
-        if not MIN_CRED_LENGTH <= len(username) < MAX_USERNAME_LENGTH:
-            raise ValueError("Username length must be inside [4;24)")
-        if not MIN_CRED_LENGTH <= len(password) < MAX_PASSWORD_LENGTH:
-            raise ValueError("Password length must be inside [4;36)")
-        if set(username) not in set(ID_CHARACTER_SET):
-            raise ValueError("Username contains bad characters")
-        if set(password) not in set(ID_CHARACTER_SET + "@&$#-_!?~*^%.,"):
-            raise ValueError("Password contains bad characters")
+        if not fullmatch(USERNAME_RE, username):
+            raise ValueError("Username contains bad characters or of incorrect length")
+        if not fullmatch(PASSWORD_RE, password):
+            raise ValueError("Password contains bad characters or of incorrect length")
         if privileges < 0:
             raise ValueError("Privileges integer cannot be negative")
         if privileges & VALIDATION_MASK != privileges:
@@ -380,11 +385,11 @@ class Glue:
         if not isinstance(password, str):
             raise TypeError("Password must be a string")
         if not isinstance(remember, bool):
-            raise TypeError("Remember me option must be a bool")
-        if not MIN_CRED_LENGTH <= len(username) < MAX_USERNAME_LENGTH:
-            raise ValueError("Username length must be inside [4;24)")
-        if not MIN_CRED_LENGTH <= len(password) < MAX_PASSWORD_LENGTH:
-            raise ValueError("Password length must be inside [4;36)")
+            raise TypeError("Remember_me option must be a bool")
+        if not fullmatch(USERNAME_RE, username):
+            raise ValueError("Username contains bad characters or of incorrect length")
+        if not fullmatch(PASSWORD_RE, password):
+            raise ValueError("Password contains bad characters or of incorrect length")
         try:
             uid, true_password = self.query(
                 "SELECT id, password FROM users WHERE username = ?", (username,)
@@ -598,7 +603,7 @@ class Glue:
         """
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
-        if not fullmatch(r"^[a-zA-Z0-9]+$", paste_id):
+        if not fullmatch(ID_CHARACTER_RE, paste_id):
             raise ValueError("Paste ID is invalid")
         try:
             if self.authorized:
@@ -692,7 +697,7 @@ class Glue:
         """
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
-        if not fullmatch(r"^[a-zA-Z0-9]+$", paste_id):
+        if not fullmatch(ID_CHARACTER_RE, paste_id):
             raise ValueError("Paste ID is invalid")
         try:
             with open(path.join(self.filepath, paste_id), encoding="utf-8") as file:
@@ -822,7 +827,7 @@ class Glue:
         """
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
-        if not fullmatch(r"^[a-zA-Z0-9]+$", paste_id):
+        if not fullmatch(ID_CHARACTER_RE, paste_id):
             raise ValueError("Paste ID is invalid")
         try:
             if self.authorized:
