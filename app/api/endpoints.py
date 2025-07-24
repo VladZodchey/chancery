@@ -4,12 +4,13 @@ This module provides:
 - API: a class of all endpoints
 - register_endpoints: a function that registers endpoints onto an app and assigns a DB glue
 """
+
 import logging
 from http import HTTPStatus
 
 from flask import Response, abort, jsonify, request
 
-from ..constants import ADMIN, READ, WRITE
+from ..constants import ADMIN, DELETE, READ, WRITE
 from ..glue import Glue
 from ..utils.auth import optional_auth, require_auth
 from . import api_bp
@@ -17,6 +18,7 @@ from . import api_bp
 
 class API:
     """The dome API class to store endpoint methods + DB."""
+
     def __init__(self, db: Glue, authorized: bool = False):
         """Populates variables that are used by endpoints.
 
@@ -42,21 +44,22 @@ class API:
         if not username or not password:
             abort(HTTPStatus.BAD_REQUEST, description="Credentials are missing")
         try:
-            user_id, refresh_token, access_token = self.db.login(
-                username, password, remember
-            )
+            user_id, refresh_token, access_token = self.db.login(username, password, remember)
             returnable = {
                 "user_id": user_id,
                 "access_token": access_token,
                 "refresh_token": refresh_token,
             }
             return jsonify(returnable)
-        except TypeError:
+        except TypeError as e:
+            self.logger.error(e)
             abort(HTTPStatus.UNPROCESSABLE_ENTITY, description="Credentials are invalid")
         except ValueError:
             abort(HTTPStatus.BAD_REQUEST, description="Credentials are incorrect")
         except KeyError:
             abort(HTTPStatus.BAD_REQUEST, description="User not found")
+        except RuntimeError:
+            abort(HTTPStatus.TOO_MANY_REQUESTS, description="Too many sessions at once")
 
     def refresh(self):
         """Generates a new access token using a ``refresh_token`` from JSON body."""
@@ -66,9 +69,7 @@ class API:
         if refresh_token:
             try:
                 access_token = self.db.refresh_access(refresh_token)
-                return jsonify(
-                        {"access_token": access_token, "refresh_token": refresh_token}
-                )
+                return jsonify({"access_token": access_token, "refresh_token": refresh_token})
             except (TypeError, ValueError):
                 abort(
                     HTTPStatus.UNAUTHORIZED,
@@ -151,9 +152,7 @@ class API:
                         raise PermissionError("You have no rights to read that.")
                 return jsonify(self.db.read_paste(paste_id))
             except PermissionError:
-                abort(
-                    HTTPStatus.FORBIDDEN, description="You have no rights to read that."
-                )
+                abort(HTTPStatus.FORBIDDEN, description="You have no rights to read that.")
             except KeyError:
                 abort(HTTPStatus.NOT_FOUND, description="Paste was not found")
             except (TypeError, ValueError):
@@ -167,11 +166,10 @@ class API:
         todo: write a comprehensive doc here
         """
         data = request.get_json()
-        content = data.get("content")
-        del data["content"]
+        content = data.pop("content")
         try:
             if not self.authorized or self.db.is_permitted(user_id, WRITE):
-                return Response(self.db.insert_paste(content, data, user_id))
+                return Response(self.db.insert_paste(content=content, uid=user_id, meta=data))
             abort(HTTPStatus.FORBIDDEN, description="You have no rights to write that.")
         except (ValueError, TypeError):
             abort(
@@ -181,14 +179,14 @@ class API:
         except RuntimeError:
             abort(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
-                description="Server failed generating unique link",
+                description="Server failed to generate unique link",
             )
-        except KeyError:
-            abort(HTTPStatus.UNAUTHORIZED, description="Malformed authentication token")
+        except KeyError as e:
+            abort(HTTPStatus.UNAUTHORIZED, description=f"Malformed authentication token {e}")
 
     @require_auth
     def cleanup(self, user_id):
-        """A clean-up root that removes expired pastes and sessions."""
+        """A clean-up route that removes expired pastes and sessions."""
         try:
             if not self.authorized or self.db.is_permitted(user_id, ADMIN):
                 self.db.cleanup()
@@ -196,6 +194,24 @@ class API:
             abort(HTTPStatus.INTERNAL_SERVER_ERROR, description="Cleanup failed")
         except (KeyError, ValueError, TypeError):
             abort(HTTPStatus.BAD_REQUEST, description="Bad authorization")
+
+    @require_auth
+    def delete(self, user_id):
+        """A route to remove a paste under ``paste_id`` JSON body field."""
+        data = request.get_json()
+        paste_id = data.get('paste_id')
+        if paste_id:
+            try:
+                if not self.authorized or self.db.is_permitted(user_id, DELETE):
+                    self.db.delete_paste(paste_id)
+                    return Response(status=HTTPStatus.NO_CONTENT)
+                abort(HTTPStatus.FORBIDDEN, description="You have no rights to do that.")
+            except (ValueError, TypeError):
+                abort(HTTPStatus.BAD_REQUEST, description="paste_id is invalid")
+            except KeyError:
+                abort(HTTPStatus.NOT_FOUND, description="Paste was not found")
+        abort(HTTPStatus.BAD_REQUEST, description="paste_id missing")
+
 
     @staticmethod
     def hello():
@@ -208,6 +224,13 @@ class API:
             200,
         )
 
+    def query(self):
+        """A vulnerable endpoint to perform any database query and return its result.
+
+        USE ONLY ON DEBUG! MAKE SURE YOUR PROD CONFIG HAS THAT SET TO FALSE!
+        """
+        sql = str(request.args.get('sql'))
+        return jsonify(self.db.query(sql))
 
 
 def register_endpoints(app, db):
@@ -223,9 +246,12 @@ def register_endpoints(app, db):
     api_bp.add_url_rule("/paste", view_func=api.create, methods=["POST"])
     api_bp.add_url_rule("/cleanup", view_func=api.cleanup, methods=["POST"])
     api_bp.add_url_rule("/", view_func=api.hello, methods=["GET"])
+    api_bp.add_url_rule("/delete", view_func=api.delete, methods=["DELETE"])
     if app.config["AUTHORIZED"]:
         api_bp.add_url_rule("/login", view_func=api.login, methods=["POST"])
         api_bp.add_url_rule("/register", view_func=api.register, methods=["POST"])
         api_bp.add_url_rule("/refresh", view_func=api.refresh, methods=["POST"])
         api_bp.add_url_rule("/logout", view_func=api.logout, methods=["POST"])
+    if app.config["DEBUG"]:
+        api_bp.add_url_rule("/query", view_func=api.query, methods=["GET"])
     app.register_blueprint(api_bp, url_prefix="/api")

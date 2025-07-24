@@ -3,6 +3,7 @@
 This module provides:
 - setup_logging: a function to assign app logging to a rotating file handler
 """
+
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -21,16 +22,12 @@ def setup_logging(app):
 
     file_handler = RotatingFileHandler("logs/app.log", maxBytes=10_000_000, backupCount=5)
     file_handler.setFormatter(
-        logging.Formatter(
-            "%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]"
-        )
+        logging.Formatter("%(asctime)s %(levelname)s: %(message)s [in %(pathname)s:%(lineno)d]")
     )
     file_handler.setLevel(log_level)
 
     console_handler = logging.StreamHandler()
-    console_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
-    )
+    console_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"))
     console_handler.setLevel(log_level)
 
     app.logger.handlers = []

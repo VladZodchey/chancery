@@ -31,11 +31,11 @@ build-docker:
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
     - echo "$DOCKER_HUB_PASSWORD" | docker login -u "vladzodchey" --password-stdin
+    - docker context create tls_context
+    - docker buildx create --name container-builder --driver docker-container --bootstrap --use tls_context
+    - docker run --privileged --rm tonistiigi/binfmt --install all
   script:
-    - docker build -t $IMAGE_NAME .
-    - docker push $IMAGE_NAME
-    - docker tag $IMAGE_NAME $DOCKER_HUB_IMAGE
-    - docker push $DOCKER_HUB_IMAGE
+    - docker buildx build --platform linux/amd64,linux/arm64 -t $IMAGE_NAME -t $DOCKER_HUB_IMAGE --push .
   only:
     - main
   tags:

@@ -3,6 +3,9 @@
 This module provides:
 - Glue: a class of DB glue to perform authentication and actual paste processing
 """
+
+from __future__ import annotations
+
 import logging
 from datetime import UTC, datetime, timedelta
 from json import dumps, loads
@@ -10,16 +13,18 @@ from os import path, remove
 from re import fullmatch
 from secrets import choice, token_urlsafe
 from sqlite3 import IntegrityError, OperationalError, Row, connect
+from typing import Any
 
 from bcrypt import gensalt, hashpw
 from pyseto import DecryptError, Key, Paseto, VerifyError
 
 from .constants import (
+    CONCURRENT_SESSIONS,
+    ID_CHARACTER_RE,
     ID_CHARACTER_SET,
     ID_LENGTH,
-    MAX_PASSWORD_LENGTH,
-    MAX_USERNAME_LENGTH,
-    MIN_CRED_LENGTH,
+    PASSWORD_RE,
+    USERNAME_RE,
     VALIDATION_MASK,
 )
 
@@ -55,9 +60,7 @@ class Glue:
                 New pastes will be created in the same directory as the process."""
             )
         if not protected_path and authorized:
-            self.logger.warning(
-                "Warning: the path to protected pastes is empty."
-            )
+            self.logger.warning("Warning: the path to protected pastes is empty.")
         self.dbpath = db_path
         self.filepath = pastes_path
         self.protected_filepath = protected_path
@@ -92,6 +95,7 @@ class Glue:
                 );
                 CREATE TABLE IF NOT EXISTS pastes (
                     id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL DEFAULT 'untitled',
                     author TEXT,
                     type TEXT NOT NULL DEFAULT 'txt',
                     protected INTEGER NOT NULL DEFAULT FALSE,
@@ -105,6 +109,7 @@ class Glue:
                 cursor.executescript("""
                     CREATE TABLE IF NOT EXISTS pastes (
                         id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL DEFAULT 'untitled',
                         author TEXT,
                         type TEXT NOT NULL DEFAULT 'txt',
                         meta TEXT NOT NULL DEFAULT '{}',
@@ -113,6 +118,13 @@ class Glue:
                     );
                 """)
             conn.commit()
+            if self.authorized:
+                user_count = self.query("SELECT COUNT(*) FROM users")[0][0]
+                if not user_count:
+                    self.logger.warning(
+                        "No users found. Creating root user admin:admin. Change the password!"
+                    )
+                    self.register_user("admin", "admin", VALIDATION_MASK)
 
     def query(self, query: str, params: tuple = (), out_dict: bool = False) -> list:
         """Performs a thread-safe query.
@@ -131,6 +143,8 @@ class Glue:
             cursor = conn.cursor()
             cursor.execute(query, params)
             result = cursor.fetchall()
+            if out_dict:
+                result = [dict(row) for row in result]
             conn.commit()
             return result
 
@@ -157,14 +171,47 @@ class Glue:
         if privilege < 0:
             raise TypeError("Privileges cannot be negative")
         if privilege & VALIDATION_MASK != privilege:
-            raise ValueError(
-                "Privileges integer must be a bitwise OR of individual permissions"
-            )
+            raise ValueError("Privileges integer must be a bitwise OR of individual permissions")
         try:
             real = self.query("SELECT privileges FROM users WHERE id = ?", (user_id,))
             return real[0][0] & privilege == privilege
         except IndexError as e:
             raise KeyError("User not found") from e
+
+    @staticmethod
+    def get_item(
+            store: dict,
+            key: str | int | bool | float,
+            default: Any = None,
+            types: type[Any] | tuple | None = None,
+            pop: bool = False
+    ) -> Any:
+        """Retrieves a value from a dictionary, defaulting to a specified value and checking type.
+
+        Args:
+              store (dict): The dictionary to retrieve value from
+              key (str | int | float | bool): The key of a dictionary item
+              default (Any): The value to default to
+              types (type | tuple[type]): The type(s) to check value against. None if any is allowed
+              pop (bool): If True, will remove the key-value pair after getting
+
+        Returns:
+            Any: The value associated with the key in the dictionary.
+
+        Raises:
+            TypeError: If ``store`` is not a dict, ``key`` is not a string or value is of wrong type
+        """
+        if not isinstance(store, dict):
+            raise TypeError("Store must a dict")
+        if not isinstance(key, int | float | str | bool):
+            raise TypeError("Key must be immutable")
+        if not isinstance(pop, bool):
+            raise TypeError("Pop must be a bool")
+        item = (store.get, store.pop)[int(pop)](key, default)
+        if types is None or isinstance(item, types):
+            return item
+        raise TypeError("Value of wrong type")
+
 
     @staticmethod
     def salt(factor: int = 12) -> bytes:
@@ -272,7 +319,7 @@ class Glue:
         Args:
             username (str): The login. <24 >=4 characters
             password (str): The password. <36 >=4 characters
-            privileges (int): A custom TypedClass of bools of user's permissions.
+            privileges (int): An integer of user's permissions.
 
         Returns:
             int: New user ID.
@@ -287,20 +334,14 @@ class Glue:
             raise TypeError("Username must be a string")
         if not isinstance(password, str):
             raise TypeError("Password must be a string")
-        if not MIN_CRED_LENGTH <= len(username) < MAX_USERNAME_LENGTH:
-            raise ValueError("Username length must be inside [4;24)")
-        if not MIN_CRED_LENGTH <= len(password) < MAX_PASSWORD_LENGTH:
-            raise ValueError("Password length must be inside [4;36)")
-        if set(username) not in set(ID_CHARACTER_SET):
-            raise ValueError("Username contains bad characters")
-        if set(password) not in set(ID_CHARACTER_SET + "@&$#-_!?~*^%.,"):
-            raise ValueError("Password contains bad characters")
+        if not fullmatch(USERNAME_RE, username):
+            raise ValueError("Username contains bad characters or of incorrect length")
+        if not fullmatch(PASSWORD_RE, password):
+            raise ValueError("Password contains bad characters or of incorrect length")
         if privileges < 0:
             raise ValueError("Privileges integer cannot be negative")
         if privileges & VALIDATION_MASK != privileges:
-            raise ValueError(
-                "Privileges integer must be a bitwise OR of individual permissions"
-            )
+            raise ValueError("Privileges integer must be a bitwise OR of individual permissions")
         salt = self.salt()
         hashed = self.hash(password, salt)
         try:
@@ -333,17 +374,18 @@ class Glue:
             TypeError: If some of the arguments are not a string
             ValueError: If credentials are incorrect or invalid
             KeyError: If the user was not found
+            RuntimeError: If the user's concurrent session count exceeds limit
         """
         if not isinstance(username, str):
             raise TypeError("Username must be a string")
         if not isinstance(password, str):
             raise TypeError("Password must be a string")
         if not isinstance(remember, bool):
-            raise TypeError("Remember me option must be a bool")
-        if not MIN_CRED_LENGTH <= len(username) < MAX_USERNAME_LENGTH:
-            raise ValueError("Username length must be inside [4;24)")
-        if not MIN_CRED_LENGTH <= len(password) < MAX_PASSWORD_LENGTH:
-            raise ValueError("Password length must be inside [4;36)")
+            raise TypeError("Remember_me option must be a bool")
+        if not fullmatch(USERNAME_RE, username):
+            raise ValueError("Username contains bad characters or of incorrect length")
+        if not fullmatch(PASSWORD_RE, password):
+            raise ValueError("Password contains bad characters or of incorrect length")
         try:
             uid, true_password = self.query(
                 "SELECT id, password FROM users WHERE username = ?", (username,)
@@ -351,6 +393,11 @@ class Glue:
             if not self.compare(true_password, password):
                 raise ValueError("Incorrect credentials")
             if remember:
+                session_count = self.query(
+                    "SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,)
+                )[0][0]
+                if session_count > CONCURRENT_SESSIONS:
+                    raise RuntimeError("Concurrent session count exceeds limit")
                 refresh_token = token_urlsafe(64)
                 access_token = self.paseto.encode(
                     self.paseto_key,
@@ -434,11 +481,7 @@ class Glue:
             raise ValueError("User ID cannot be negative")
         try:
             if (
-                int(
-                    self.query("SELECT uid FROM sessions WHERE text = ?", (user_id,))[
-                        0
-                    ][0]
-                )
+                int(self.query("SELECT uid FROM sessions WHERE text = ?", (user_id,))[0][0])
                 != user_id
             ):
                 raise PermissionError("User ID does not match that of session owner")
@@ -491,9 +534,7 @@ class Glue:
         if not isinstance(new_privileges, int):
             raise TypeError("Privileges level must be an integer")
         if new_privileges & VALIDATION_MASK != new_privileges:
-            raise ValueError(
-                "Privileges integer must be a bitwise OR of individual permissions"
-            )
+            raise ValueError("Privileges integer must be a bitwise OR of individual permissions")
         if user_id < 0:
             raise ValueError("User ID cannot be negative")
         if new_privileges < 0:
@@ -539,9 +580,7 @@ class Glue:
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
         try:
-            return self.query("SELECT protected FROM pastes WHERE id = ?", (paste_id,))[
-                0
-            ][0]
+            return self.query("SELECT protected FROM pastes WHERE id = ?", (paste_id,))[0][0]
         except IndexError as e:
             raise KeyError("Paste was not found") from e
 
@@ -562,7 +601,7 @@ class Glue:
         """
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
-        if not fullmatch(r"^[a-zA-Z0-9]+$", paste_id):
+        if not fullmatch(ID_CHARACTER_RE, paste_id):
             raise ValueError("Paste ID is invalid")
         try:
             if self.authorized:
@@ -576,21 +615,17 @@ class Glue:
                 protected = result.get("protected")
                 author = result.get("author")
                 filetype = result.get("type")
-                created_at = datetime.strptime(
-                    result.get("created_at"), "%Y-%m-%d %H:%M:%S"
-                )
+                created_at = datetime.strptime(result.get("created_at"), "%Y-%m-%d %H:%M:%S")
                 expires_at = result.get("expires_at")
                 meta = loads(result.get("meta"))
-                if expires_at and datetime.strptime(
-                    expires_at, "%Y-%m-%d %H:%M:%S"
-                ) < datetime.now(UTC):
+                if expires_at and datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S") < datetime.now(
+                    UTC
+                ):
                     self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
                     remove(path.join(self.filepath, paste_id))
                     raise TimeoutError("Paste expired")
                 if not protected:
-                    with open(
-                        path.join(self.filepath, paste_id), encoding="utf-8"
-                    ) as file:
+                    with open(path.join(self.filepath, paste_id), encoding="utf-8") as file:
                         content = file.read()
                 else:
                     # ... probably should decrypt stuff ...
@@ -618,14 +653,12 @@ class Glue:
             )[0]
             author = result.get("author")
             filetype = result.get("type")
-            created_at = datetime.strptime(
-                result.get("created_at"), "%Y-%m-%d %H:%M:%S"
-            )
+            created_at = datetime.strptime(result.get("created_at"), "%Y-%m-%d %H:%M:%S")
             expires_at = result.get("expires_at")
             meta = loads(result.get("meta"))
-            if expires_at and datetime.strptime(
-                expires_at, "%Y-%m-%d %H:%M:%S"
-            ) < datetime.now(UTC):
+            if expires_at and datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S") < datetime.now(
+                UTC
+            ):
                 self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
                 remove(path.join(self.filepath, paste_id))
                 raise TimeoutError("Paste expired")
@@ -660,7 +693,7 @@ class Glue:
         """
         if not isinstance(paste_id, str):
             raise TypeError("Paste ID must be a string")
-        if not fullmatch(r"^[a-zA-Z0-9]+$", paste_id):
+        if not fullmatch(ID_CHARACTER_RE, paste_id):
             raise ValueError("Paste ID is invalid")
         try:
             with open(path.join(self.filepath, paste_id), encoding="utf-8") as file:
@@ -668,9 +701,9 @@ class Glue:
         except FileNotFoundError:
             raise FileNotFoundError(
                 "Paste was not found"
-            ) from None # sanitizing internal error for logging
+            ) from None  # sanitizing internal error for logging
 
-    def insert_paste(self, content: str, meta: dict, uid: int) -> str:
+    def insert_paste(self, content: str, uid: int | None, meta: dict | None = None) -> str:
         """Creates a paste with metadata and produces a unique ID.
 
         Args:
@@ -689,46 +722,65 @@ class Glue:
         """
         if not isinstance(content, str):
             raise TypeError("Content must be a string")
+        if meta is None:
+            meta = {}
+        if not isinstance(meta, dict):
+            raise TypeError("Metadata must be a dictionary or None")
+        if not isinstance(uid, int | type(None)):
+            raise TypeError("User ID must be an integer or None")
         paste_id = self.generate_unique_id()
-        sign_author = meta.get("author")
-        author = None
-        if sign_author:
-            try:
-                author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[
-                    0
-                ][0]
-            except IndexError as e:
-                raise KeyError("User was not found") from e
-        filetype = meta.get("type")
-        protected = bool(meta.get("protected"))
-        expires_at = meta.get("expires_at")
+
+        info = meta.copy()  # Copying to prevent accidentally overwriting anything
+
+        title = self.get_item(info,"title", "Untitled", str, True)
+        expires_at = self.get_item(info, "expires_at", None, (datetime, type(None)), True)
+        filetype = self.get_item(info, "filetype", "txt", str, pop=True)
         if expires_at:
             expires_at = datetime.strftime(expires_at, "%Y-%m-%d %H:%M:%S")
-        del meta["author"]
-        del meta["filetype"]
-        del meta["protected"]
-        del meta["expires_at"]
+        if self.authorized:
+            protected = self.get_item(info, "protect", False, bool, pop=True)
+            author = None
+            if self.get_item(info, "sign", True, bool, True):
+                try:
+                    author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[0][0]
+                except IndexError:
+                    raise KeyError("User was not found") from None
+            self.query(
+                """INSERT INTO pastes (
+                    id,
+                    title,
+                    author, 
+                    type, 
+                    protected, 
+                    meta, 
+                    expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (paste_id, title, author, filetype, protected, dumps(info), expires_at),
+            )
+            if not protected:
+                with open(path.join(self.filepath, paste_id), mode="w", encoding="utf-8") as file:
+                    file.write(content)
+            else:
+                # ... probably should encrypt stuff ...
+                with open(
+                        path.join(self.protected_filepath, paste_id), mode="w", encoding="utf-8"
+                ) as file:
+                    file.write(content)
+            return paste_id
+        author = self.get_item(info, "sign", None, (str, type(None)), True)
         self.query(
             """INSERT INTO pastes (
-                author, 
-                type, 
-                protected, 
-                meta, 
+                id,
+                title,
+                author,
+                type,
+                meta,
                 expires_at
-                ) VALUES (?, ?, ?, ?, ?)""",
-            (author, filetype, protected, dumps(meta), expires_at),
+            ) VALUES (?, ?, ?, ?, ?, ?)""",
+            (paste_id, title, author, filetype, dumps(info), expires_at)
         )
-        if not protected:
-            with open(
-                path.join(self.filepath, paste_id), mode="w", encoding="utf-8"
-            ) as file:
-                file.write(content)
-        else:
-            # ... probably should encrypt stuff ...
-            with open(
-                path.join(self.protected_filepath, paste_id), mode="w", encoding="utf-8"
-            ) as file:
-                file.write(content)
+        with open(path.join(self.filepath, paste_id), mode="w", encoding="utf-8") as file:
+            file.write(content)
         return paste_id
 
     def cleanup(self) -> None:
@@ -754,3 +806,33 @@ class Glue:
             self.query("DELETE FROM pastes WHERE expires_at < datetime('now')")
         except (OperationalError, FileNotFoundError, PermissionError) as e:
             raise RuntimeError("SQL querying failed") from e
+
+    def delete_paste(self, paste_id: str) -> None:
+        """Removes a paste by its ID.
+
+        Args:
+            paste_id (str): The paste ID.
+
+        Returns:
+            Nothing.
+
+        Raises:
+            KeyError: If paste associated with ID doesn't exist
+            TypeError: If ``paste_id`` is not a string
+            ValueError: If ``paste_id`` is an invalid ID
+        """
+        if not isinstance(paste_id, str):
+            raise TypeError("Paste ID must be a string")
+        if not fullmatch(ID_CHARACTER_RE, paste_id):
+            raise ValueError("Paste ID is invalid")
+        try:
+            if self.authorized:
+                protected = self.query(
+                    "DELETE FROM pastes WHERE id = ? RETURNING protected", (paste_id,)
+                )[0][0]
+                remove(path.join(self.protected_filepath if protected else self.filepath, paste_id))
+            else:
+                self.query("DELETE FROM pastes WHERE id = ?", (paste_id,))
+                remove(path.join(self.filepath, paste_id))
+        except (FileNotFoundError, IndexError):
+            raise KeyError("Paste does not exists") from None
