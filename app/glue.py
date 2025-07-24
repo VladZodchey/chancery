@@ -6,9 +6,6 @@ This module provides:
 
 from __future__ import annotations
 
-import re
-from typing import Any, Type
-
 import logging
 from datetime import UTC, datetime, timedelta
 from json import dumps, loads
@@ -16,17 +13,18 @@ from os import path, remove
 from re import fullmatch
 from secrets import choice, token_urlsafe
 from sqlite3 import IntegrityError, OperationalError, Row, connect
+from typing import Any
 
 from bcrypt import gensalt, hashpw
 from pyseto import DecryptError, Key, Paseto, VerifyError
 
 from .constants import (
     CONCURRENT_SESSIONS,
-    ID_CHARACTER_SET,
     ID_CHARACTER_RE,
+    ID_CHARACTER_SET,
     ID_LENGTH,
-    USERNAME_RE,
     PASSWORD_RE,
+    USERNAME_RE,
     VALIDATION_MASK,
 )
 
@@ -124,7 +122,7 @@ class Glue:
                 user_count = self.query("SELECT COUNT(*) FROM users")[0][0]
                 if not user_count:
                     self.logger.warning(
-                        "No users found. Creating root user admin:admin. Change the password after logging in!"
+                        "No users found. Creating root user admin:admin. Change the password!"
                     )
                     self.register_user("admin", "admin", VALIDATION_MASK)
 
@@ -185,11 +183,10 @@ class Glue:
             store: dict,
             key: str | int | bool | float,
             default: Any = None,
-            types: Type[Any] | tuple = None,
+            types: type[Any] | tuple | None = None,
             pop: bool = False
     ) -> Any:
-        """Retrieves a value from a dictionary,
-            defaulting to a specified value and checking type.
+        """Retrieves a value from a dictionary, defaulting to a specified value and checking type.
 
         Args:
               store (dict): The dictionary to retrieve value from
@@ -204,10 +201,9 @@ class Glue:
         Raises:
             TypeError: If ``store`` is not a dict, ``key`` is not a string or value is of wrong type
         """
-
         if not isinstance(store, dict):
             raise TypeError("Store must a dict")
-        if not isinstance(key, (int, float, str, bool)):
+        if not isinstance(key, int | float | str | bool):
             raise TypeError("Key must be immutable")
         if not isinstance(pop, bool):
             raise TypeError("Pop must be a bool")
@@ -397,7 +393,9 @@ class Glue:
             if not self.compare(true_password, password):
                 raise ValueError("Incorrect credentials")
             if remember:
-                session_count = self.query("SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,))[0][0]
+                session_count = self.query(
+                    "SELECT COUNT(*) FROM sessions WHERE uid = ?", (uid,)
+                )[0][0]
                 if session_count > CONCURRENT_SESSIONS:
                     raise RuntimeError("Concurrent session count exceeds limit")
                 refresh_token = token_urlsafe(64)
@@ -705,7 +703,7 @@ class Glue:
                 "Paste was not found"
             ) from None  # sanitizing internal error for logging
 
-    def insert_paste(self, content: str, uid: int | None, meta: dict = None) -> str:
+    def insert_paste(self, content: str, uid: int | None, meta: dict | None = None) -> str:
         """Creates a paste with metadata and produces a unique ID.
 
         Args:
@@ -728,7 +726,7 @@ class Glue:
             meta = {}
         if not isinstance(meta, dict):
             raise TypeError("Metadata must be a dictionary or None")
-        if not isinstance(uid, (int, type(None))):
+        if not isinstance(uid, int | type(None)):
             raise TypeError("User ID must be an integer or None")
         paste_id = self.generate_unique_id()
 
@@ -746,7 +744,7 @@ class Glue:
                 try:
                     author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[0][0]
                 except IndexError:
-                    raise KeyError("User was not found")
+                    raise KeyError("User was not found") from None
             self.query(
                 """INSERT INTO pastes (
                     id,

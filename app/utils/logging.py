@@ -15,7 +15,6 @@ def setup_logging(app):
     Args:
         app (Flask): The Flask app to configure
     """
-
     log_level = logging.DEBUG if app.config["DEBUG"] else logging.INFO
 
     if not os.path.exists("logs"):
