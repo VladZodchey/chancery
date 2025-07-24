@@ -4,6 +4,9 @@ This module provides:
 - Glue: a class of DB glue to perform authentication and actual paste processing
 """
 
+from __future__ import annotations
+from typing import Any, Type
+
 import logging
 from datetime import UTC, datetime, timedelta
 from json import dumps, loads
@@ -133,6 +136,8 @@ class Glue:
             cursor = conn.cursor()
             cursor.execute(query, params)
             result = cursor.fetchall()
+            if out_dict:
+                result = [dict(row) for row in result]
             conn.commit()
             return result
 
@@ -165,6 +170,43 @@ class Glue:
             return real[0][0] & privilege == privilege
         except IndexError as e:
             raise KeyError("User not found") from e
+
+    @staticmethod
+    def get_item(
+            store: dict,
+            key: str | int | bool | float,
+            default: Any = None,
+            types: Type[Any] | tuple = None,
+            pop: bool = False
+    ) -> Any:
+        """Retrieves a value from a dictionary,
+            defaulting to a specified value and checking type.
+
+        Args:
+              store (dict): The dictionary to retrieve value from
+              key (str | int | float | bool): The key of a dictionary item
+              default (Any): The value to default to
+              types (type | tuple[type]): The type(s) to check value against. None if any is allowed
+              pop (bool): If True, will remove the key-value pair after getting
+
+        Returns:
+            Any: The value associated with the key in the dictionary.
+
+        Raises:
+            TypeError: If ``store`` is not a dict, ``key`` is not a string or value is of wrong type
+        """
+
+        if not isinstance(store, dict):
+            raise TypeError("Store must a dict")
+        if not isinstance(key, (int, float, str, bool)):
+            raise TypeError("Key must be immutable")
+        if not isinstance(pop, bool):
+            raise TypeError("Pop must be a bool")
+        item = (store.get, store.pop)[int(pop)](key, default)
+        if types is None or isinstance(item, types):
+            return item
+        raise TypeError("Value of wrong type")
+
 
     @staticmethod
     def salt(factor: int = 12) -> bytes:
@@ -599,6 +641,7 @@ class Glue:
                 if expires_at:
                     returnable["expires_at"] = expires_at
                 return returnable
+            self.logger.debug(paste_id)
             result = self.query(
                 """SELECT author, type, meta, created_at, expires_at 
                 FROM pastes 
@@ -606,6 +649,7 @@ class Glue:
                 (paste_id,),
                 out_dict=True,
             )[0]
+            self.logger.debug("Fetched the record")
             author = result.get("author")
             filetype = result.get("type")
             created_at = datetime.strptime(result.get("created_at"), "%Y-%m-%d %H:%M:%S")
@@ -658,7 +702,7 @@ class Glue:
                 "Paste was not found"
             ) from None  # sanitizing internal error for logging
 
-    def insert_paste(self, content: str, meta: dict, uid: int) -> str:
+    def insert_paste(self, content: str, uid: int | None, meta: dict = None) -> str:
         """Creates a paste with metadata and produces a unique ID.
 
         Args:
@@ -677,42 +721,65 @@ class Glue:
         """
         if not isinstance(content, str):
             raise TypeError("Content must be a string")
+        if meta is None:
+            meta = {}
+        if not isinstance(meta, dict):
+            raise TypeError("Metadata must be a dictionary or None")
+        if not isinstance(uid, (int, type(None))):
+            raise TypeError("User ID must be an integer or None")
         paste_id = self.generate_unique_id()
-        sign_author = meta.get("author")
-        author = None
-        if sign_author:
-            try:
-                author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[0][0]
-            except IndexError as e:
-                raise KeyError("User was not found") from e
-        filetype = meta.get("type")
-        protected = bool(meta.get("protected"))
-        expires_at = meta.get("expires_at")
+
+        info = meta.copy()  # Copying to prevent accidentally overwriting anything
+
+        title = self.get_item(info,"title", "Untitled", str, True)
+        expires_at = self.get_item(info, "expires_at", None, (datetime, type(None)), True)
+        filetype = self.get_item(info, "filetype", "txt", str, pop=True)
         if expires_at:
             expires_at = datetime.strftime(expires_at, "%Y-%m-%d %H:%M:%S")
-        del meta["author"]
-        del meta["filetype"]
-        del meta["protected"]
-        del meta["expires_at"]
+        if self.authorized:
+            protected = self.get_item(info, "protect", False, bool, pop=True)
+            author = None
+            if self.get_item(info, "sign", True, bool, True):
+                try:
+                    author = self.query("SELECT username FROM users WHERE id = ?", (uid,))[0][0]
+                except IndexError:
+                    raise KeyError("User was not found")
+            self.query(
+                """INSERT INTO pastes (
+                    id,
+                    title,
+                    author, 
+                    type, 
+                    protected, 
+                    meta, 
+                    expires_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (paste_id, title, author, filetype, protected, dumps(info), expires_at),
+            )
+            if not protected:
+                with open(path.join(self.filepath, paste_id), mode="w", encoding="utf-8") as file:
+                    file.write(content)
+            else:
+                # ... probably should encrypt stuff ...
+                with open(
+                        path.join(self.protected_filepath, paste_id), mode="w", encoding="utf-8"
+                ) as file:
+                    file.write(content)
+            return paste_id
+        author = self.get_item(info, "sign", None, (str, type(None)), True)
         self.query(
             """INSERT INTO pastes (
-                author, 
-                type, 
-                protected, 
-                meta, 
+                id,
+                title,
+                author,
+                type,
+                meta,
                 expires_at
-                ) VALUES (?, ?, ?, ?, ?)""",
-            (author, filetype, protected, dumps(meta), expires_at),
+            ) VALUES (?, ?, ?, ?, ?, ?)""",
+            (paste_id, title, author, filetype, dumps(info), expires_at)
         )
-        if not protected:
-            with open(path.join(self.filepath, paste_id), mode="w", encoding="utf-8") as file:
-                file.write(content)
-        else:
-            # ... probably should encrypt stuff ...
-            with open(
-                path.join(self.protected_filepath, paste_id), mode="w", encoding="utf-8"
-            ) as file:
-                file.write(content)
+        with open(path.join(self.filepath, paste_id), mode="w", encoding="utf-8") as file:
+            file.write(content)
         return paste_id
 
     def cleanup(self) -> None:

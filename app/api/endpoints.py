@@ -165,11 +165,10 @@ class API:
         todo: write a comprehensive doc here
         """
         data = request.get_json()
-        content = data.get("content")
-        del data["content"]
+        content = data.pop("content")
         try:
             if not self.authorized or self.db.is_permitted(user_id, WRITE):
-                return Response(self.db.insert_paste(content, data, user_id))
+                return Response(self.db.insert_paste(content=content, uid=user_id, meta=data))
             abort(HTTPStatus.FORBIDDEN, description="You have no rights to write that.")
         except (ValueError, TypeError):
             abort(
@@ -179,10 +178,10 @@ class API:
         except RuntimeError:
             abort(
                 HTTPStatus.INTERNAL_SERVER_ERROR,
-                description="Server failed generating unique link",
+                description="Server failed to generate unique link",
             )
-        except KeyError:
-            abort(HTTPStatus.UNAUTHORIZED, description="Malformed authentication token")
+        except KeyError as e:
+            abort(HTTPStatus.UNAUTHORIZED, description=f"Malformed authentication token {e}")
 
     @require_auth
     def cleanup(self, user_id):
@@ -224,6 +223,14 @@ class API:
             200,
         )
 
+    def query(self):
+        """A vulnerable endpoint to perform any database query and return its result.
+
+        USE ONLY ON DEBUG! MAKE SURE YOUR PROD CONFIG HAS THAT SET TO FALSE!
+        """
+        sql = str(request.args.get('sql'))
+        return jsonify(self.db.query(sql))
+
 
 def register_endpoints(app, db):
     """Binds endpoints to a Flask app.
@@ -238,9 +245,12 @@ def register_endpoints(app, db):
     api_bp.add_url_rule("/paste", view_func=api.create, methods=["POST"])
     api_bp.add_url_rule("/cleanup", view_func=api.cleanup, methods=["POST"])
     api_bp.add_url_rule("/", view_func=api.hello, methods=["GET"])
+    api_bp.add_url_rule("/delete", view_func=api.delete, methods=["DELETE"])
     if app.config["AUTHORIZED"]:
         api_bp.add_url_rule("/login", view_func=api.login, methods=["POST"])
         api_bp.add_url_rule("/register", view_func=api.register, methods=["POST"])
         api_bp.add_url_rule("/refresh", view_func=api.refresh, methods=["POST"])
         api_bp.add_url_rule("/logout", view_func=api.logout, methods=["POST"])
+    if app.config["DEBUG"]:
+        api_bp.add_url_rule("/query", view_func=api.query, methods=["GET"])
     app.register_blueprint(api_bp, url_prefix="/api")
