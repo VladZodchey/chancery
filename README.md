@@ -1,30 +1,29 @@
-# Chancery
+English README [here](README.en.md)
+
+# Chancery (Канцелярия)
 
 
-Ever wanted a self-hosted text file storage like Pastebin? No? Well, I did.
+Вы когда-нибудь хотели локальное хранилище текстовых файлов как Pastebin? Нет? Ну, хотя бы я захотел.
 
-This piece has these neat features:
-- Paste metadata, such as its filetype, author, creation type, additional custom fields.
-- User/role system for fine-grained access control
-- Read-protected (private) pastes
-- ...and more to come!
+У этого произведения есть такие возможности:
+- Сохранение метаданных текста, таких как авторство, тип файла, время создания и дополнительные поля.
+- Система пользователей/ролей для управления доступом
+- Защищённые для чтения (приватные) записи
+- ...в будущем функций станет больше!
 
-Contributions are welcome!
-I would really appreciate if someone with application security knowledge (and peaceful intent) reviewed the auth thingamabob I made.
+Ваши вклады приветствуются!
 
 > [!WARNING] 
-> Please note that this API is still in active pre-release development, things may break, things may change.
-> A ton of essential features are not yet implemented.
+> Предупреждение: этот API всё ещё в ранней пре-релиз разработке. Функции могут поломаться и поменяться. 
+> Множество базовых функций ещё не сделаны.
 
-> [!NOTE]
-> You might see GitLab-related config files. Do not worry! This repo is mirrored from a local GitLab instance.
-
-## Running Chancery via Docker
+## Запуск Канцелярии через Docker
 ```commandline
-docker run vladzodchey/chancery
+docker run vladzodchey/chancery:main
 ```
+- Поддерживаемые архитектуры: `AMD64`, `ARM64`.
 
-## Building from source
+## Билд из исходного кода
 ```commandline
 git clone https://github.com/VladZodchey/chancery.git ./chancery
 cd ./chancery
