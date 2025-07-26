@@ -15,3 +15,4 @@
 - [ ] Load certain constants from ENV
 - [ ] Add user deletion routes
 - [ ] Add password change/password recovery
+- [ ] Rewrite Glue methods using query into using querying, if they have multiple DB interactions.

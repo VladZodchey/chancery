@@ -7,6 +7,7 @@ This module provides:
 from __future__ import annotations
 
 import logging
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime, timedelta
 from json import dumps, loads
 from os import path, remove
@@ -31,6 +32,73 @@ from .constants import (
 
 class Glue:
     """A glue class for database interactions and user/paste business logic."""
+
+    class QueryContext(AbstractContextManager):
+        """Manages a thread-secure context for performing queries"""
+        def __init__(self, db_path: str, timeout: int = 10, row: bool = True):
+            """Sets connection-specific variables"""
+            self.row = row
+            self.timeout = timeout
+            self.db_path = db_path
+            self.conn = None
+            self.cursor = None
+
+        def __enter__(self):
+            self.conn = connect(self.db_path, timeout=self.timeout)
+            if self.row:
+                self.conn.row_factory = Row
+            self.cursor = self.conn.cursor()
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            if exc_type is None:
+                self.conn.commit()
+            else:
+                self.conn.rollback()
+            self.conn.close()
+
+        def query(self, sql: str, params: tuple = (), fetch: int = 1) -> list[tuple] | tuple | None:
+            """Performs an SQL query.
+
+            Args:
+                sql (str): The query to run
+                params (tuple): Parameters to pass
+                fetch (int): How many results to return.
+                    If -1, does not return anything.
+                    If 0, returns a list of all.
+                    If 1, returns the first row.
+                    If >1, returns a list of that many rows or all, whatever is less
+
+            Returns:
+                Nothing if ``fetch`` is -1.
+                The first row if ``fetch`` is 1.
+                A list or rows if ``fetch`` is 0 or >1.
+
+            Raises:
+                TypeError: If any of arguments are of wrong type
+                ValueError: If fetch is less than -1
+            """
+            if not isinstance(sql, str):
+                raise TypeError("Query must be a string")
+            if not isinstance(params, tuple):
+                raise TypeError("Parameters must be a tuple")
+            if not isinstance(fetch, int):
+                raise TypeError("Fetch must be an integer")
+            if fetch < -1:
+                raise ValueError("Fetch cannot be less than -1")
+            self.cursor.execute(sql, params)
+            match fetch:
+                case -1:
+                    return None
+                case 0:
+                    return self.cursor.fetchall()
+                case 1:
+                    return self.cursor.fetchone()
+                case _:
+                    return self.cursor.fetchmany(size=fetch)
+
+        def commit(self) -> None:
+            """Commits current DB changes."""
+            self.conn.commit()
 
     def __init__(
         self,
@@ -86,12 +154,15 @@ class Glue:
                     expires_at TEXT NOT NULL,
                     FOREIGN KEY (uid) REFERENCES users(id)
                 );
-                CREATE TABLE IF NOT EXISTS api_tokens (
+                CREATE TABLE IF NOT EXISTS bots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    description TEXT,
                     token TEXT NOT NULL UNIQUE,
+                    created_by INTEGER NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     expires_at INTEGER,
-                    privileges INTEGER NOT NULL DEFAULT 0
+                    privileges INTEGER NOT NULL DEFAULT 0,
+                    FOREIGN KEY (created_by) REFERENCES users(id)
                 );
                 CREATE TABLE IF NOT EXISTS pastes (
                     id TEXT PRIMARY KEY,
@@ -99,6 +170,7 @@ class Glue:
                     author TEXT,
                     type TEXT NOT NULL DEFAULT 'txt',
                     protected INTEGER NOT NULL DEFAULT FALSE,
+                    password BLOB,
                     meta TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL DEFAULT (datetime('now')),
                     expires_at TEXT,
@@ -112,6 +184,7 @@ class Glue:
                         title TEXT NOT NULL DEFAULT 'untitled',
                         author TEXT,
                         type TEXT NOT NULL DEFAULT 'txt',
+                        password BLOB,
                         meta TEXT NOT NULL DEFAULT '{}',
                         created_at TEXT NOT NULL DEFAULT (datetime('now')),
                         expires_at TEXT
@@ -126,8 +199,11 @@ class Glue:
                     )
                     self.register_user("admin", "admin", VALIDATION_MASK)
 
+    def querying(self) -> QueryContext:
+        return self.QueryContext(self.dbpath)
+
     def query(self, query: str, params: tuple = (), out_dict: bool = False) -> list:
-        """Performs a thread-safe query.
+        """Performs a thread-safe query. Note: Consider using ``QueryContext`` instead.
 
         Args:
             query (str): The SQL query
