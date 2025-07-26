@@ -1,12 +1,19 @@
-"""A module for handling unique ID generation."""
+"""A module for handling unique ID generation.
+
+This module provides:
+- Generator: a class that aids in creating unique IDs
+"""
+
+from secrets import randbits
 from threading import Lock
 from time import time
-from secrets import randbits
 
 
 class Generator:
     """A class that spits out unique IDs."""
+
     def __init__(self):
+        """Sets reference variables for enforcing uniqueness."""
         self.sequence = 0
         self.last_timestamp = 0
         self.lock = Lock()
