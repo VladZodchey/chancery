@@ -1,5 +1,5 @@
 README.md
-TODO.md
+README.en.md
 LICENSE
 *.db
 .git
@@ -10,3 +10,4 @@ protected
 docs
 .env
 .gitlab-ci.yml
+*.md
