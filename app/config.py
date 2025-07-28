@@ -18,11 +18,18 @@ load_dotenv()
 class Config:
     """Base class for pulling environment variables."""
 
-    SECRET_KEY = os.getenv("AUTH_SECRET", token_bytes(32))
+    AUTH_KEY = os.getenv("AUTH_SECRET", token_bytes(32))
+
     DATABASE_URI = os.getenv("DB_PATH", "file::memory:?cache=shared")
+
     PASTES_PATH = os.getenv("PASTES_PATH", "./pastes")
-    PROTECTED_PATH = os.getenv("PROTECTED_PATH", "./protected")
-    AUTHORIZED = os.getenv("AUTHORIZED", "True").lower() == "true"
+
+    ANONYMOUS = os.getenv("ANONYMOUS", "False").lower() == "true"
+    ANONYMOUS_REGISTER = os.getenv("ANONYMOUS", "False").lower() == "true"
+    ANONYMOUS_PASTE = os.getenv("ANONYMOUS", "False").lower() == "true"
+    ANONYMOUS_READ = os.getenv("ANONYMOUS", "True").lower() == "true"
+    ANONYMOUS_LIST = os.getenv("ANONYMOUS", "False").lower() == "true"
+
     LOG_REQUESTS = os.getenv("LOG_REQUESTS", "False").lower() == "true"
 
 
