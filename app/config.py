@@ -9,6 +9,7 @@ This module provides:
 
 import os
 from secrets import token_bytes
+from base64 import b64encode
 
 from dotenv import load_dotenv
 
@@ -18,7 +19,7 @@ load_dotenv()
 class Config:
     """Base class for pulling environment variables."""
 
-    AUTH_KEY = os.getenv("AUTH_SECRET", token_bytes(32))
+    AUTH_KEY = os.getenv("AUTH_SECRET", b64encode(token_bytes(32)).decode('utf-8'))
 
     DATABASE_URI = os.getenv("DB_PATH", "file::memory:?cache=shared")
 
@@ -30,6 +31,7 @@ class Config:
     ANONYMOUS_READ = os.getenv("ANONYMOUS", "True").lower() == "true"
     ANONYMOUS_LIST = os.getenv("ANONYMOUS", "False").lower() == "true"
 
+    LOG_ACTIONS = os.getenv("LOG_ACTIONS", "True").lower() == "true"
     LOG_REQUESTS = os.getenv("LOG_REQUESTS", "False").lower() == "true"
 
 
