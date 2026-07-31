@@ -1,0 +1,44 @@
+{
+  "lsp": {
+    "ruff": {
+      "binary": {
+        "path": ".venv/bin/ruff",
+        "arguments": ["server"],
+      },
+      "initialization_options": {
+        "settings": {
+          "lineLength": 100,
+          "lint": {
+            "extendSelect": ["E", "F", "I", "UP", "B", "SIM", "ASYNC"],
+          },
+        },
+      },
+    },
+    "ty": {
+      "binary": {
+        "path": ".venv/bin/ty",
+        "arguments": ["server"],
+      },
+    },
+    "basedpyright": {
+      "settings": {
+        "python": {
+          "pythonPath": ".venv/bin/python",
+          "analysis": {
+            "extraPaths": ["./src"],
+          },
+        },
+      },
+    },
+  },
+  "languages": {
+    "Python": {
+      "language_servers": ["basedpyright", "ruff", "ty"],
+      "formatter": {
+        "language_server": { "name": "ruff" },
+      },
+      "format_on_save": "on",
+      "tab_size": 4,
+    },
+  },
+}

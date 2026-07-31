@@ -1,0 +1,28 @@
+[
+  {
+    "label": "serve (dev)",
+    "command": "uv run myapp serve --reload --host 127.0.0.1 --port 8000",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "reveal": "always",
+  },
+  {
+    "label": "test",
+    "command": "uv run pytest",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "lint",
+    "command": "uv run ruff check",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "format",
+    "command": "uv run ruff format",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+  {
+    "label": "typecheck",
+    "command": "uv run ty check",
+    "cwd": "$ZED_WORKTREE_ROOT",
+  },
+]
