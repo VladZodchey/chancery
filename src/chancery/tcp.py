@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import suppress
 
 from .config import Settings
 from .service import InvalidContent, PasteService, PasteTooLarge
@@ -7,6 +8,7 @@ from .service import InvalidContent, PasteService, PasteTooLarge
 logger = logging.getLogger(__name__)
 
 _CHUNK_SIZE = 64 * 1024
+_IDLE_TIMEOUT = 1.0
 
 
 class TooLargeError(Exception):
@@ -30,13 +32,15 @@ async def run_tcp_server(settings: Settings, service: PasteService) -> None:
         await server.serve_forever()
 
 
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, settings: Settings, service: PasteService) -> None:
+async def handle_client(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    settings: Settings,
+    service: PasteService,
+) -> None:
     peer = writer.get_extra_info("peername")
     try:
-        data = await asyncio.wait_for(
-            _read_all(reader, settings.paste_max_size),
-            timeout=settings.tcp_connect_timeout,
-        )
+        data = await _read_all(reader, settings.paste_max_size, settings.tcp_connect_timeout)
     except TimeoutError:
         logger.warning("tcp connection timed out, peer=%s", peer)
         await _error(writer, "connection timed out")
@@ -71,10 +75,18 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
     await _write_line(writer, result.url)
 
 
-async def _read_all(reader: asyncio.StreamReader, max_size: int) -> bytes:
+async def _read_all(
+    reader: asyncio.StreamReader, max_size: int, first_byte_timeout: float
+) -> bytes:
     chunks = bytearray()
     while True:
-        chunk = await reader.read(_CHUNK_SIZE)
+        timeout = first_byte_timeout if not chunks else _IDLE_TIMEOUT
+        try:
+            chunk = await asyncio.wait_for(reader.read(_CHUNK_SIZE), timeout=timeout)
+        except TimeoutError:
+            if chunks:
+                break
+            raise
         if not chunk:
             break
         chunks.extend(chunk)
@@ -91,10 +103,9 @@ async def _write_line(writer: asyncio.StreamWriter, line: str) -> None:
         pass
     finally:
         writer.close()
-        try:
+
+        with suppress(ConnectionError):
             await writer.wait_closed()
-        except ConnectionError:
-            pass
 
 
 async def _error(writer: asyncio.StreamWriter, message: str) -> None:
