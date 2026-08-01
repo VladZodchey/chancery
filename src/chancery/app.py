@@ -5,6 +5,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.middleware import SlowAPIASGIMiddleware
+from slowapi.util import get_remote_address
 
 from . import __version__
 from .config import Settings
@@ -68,6 +71,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             service.close()
 
     app = FastAPI(title="Chancery", version=__version__, lifespan=lifespan)
+
+    # Registered first so the proxy security middleware (added below) runs
+    # outermost: it rewrites scope["client"] from X-Forwarded-For before the
+    # limiter keys on the remote address.
+    if settings.rate_limit_enabled:
+        app.state.limiter = Limiter(
+            key_func=get_remote_address,
+            default_limits=[settings.rate_limit],
+            headers_enabled=True,
+        )
+        app.add_middleware(SlowAPIASGIMiddleware)
 
     if settings.expected_host or settings.forwarded_allow_ips:
         app.add_middleware(

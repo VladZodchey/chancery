@@ -14,6 +14,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "pydantic-settings>=2.14.2",
     "pynacl>=1.6.2",
+    "slowapi>=0.1.10",
     "sqlcipher3-binary>=0.6.0",
     "typer>=0.27.0",
 ]

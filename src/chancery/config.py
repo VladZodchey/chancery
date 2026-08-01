@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     forwarded_allow_ips: str = ""
     log_level: str = "INFO"
 
+    rate_limit_enabled: bool = True
+    rate_limit: str = "60/minute"
+
     paste_max_size: int = 1_000_000
     max_ttl_seconds: int = 30 * 24 * 60 * 60
     paste_id_length: int = 10

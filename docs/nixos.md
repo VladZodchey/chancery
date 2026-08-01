@@ -64,3 +64,5 @@ All `services.chancery.settings` options with Env prototypes and defaults:
 - `tcpConnectTimeout` - `CHANCERY_TCP_CONNECT_TIMEOUT` - `60.0`
 - `kdfOpslimit` - `CHANCERY_KDF_OPSLIMIT` - `Argon2id MODERATE`
 - `kdfMemlimit` - `CHANCERY_KDF_MEMLIMIT` - `Argon2id MODERATE`
+- `rateLimitEnabled` - `CHANCERY_RATE_LIMIT_ENABLED` - `true`
+- `rateLimit` - `CHANCERY_RATE_LIMIT` - `60/minute`

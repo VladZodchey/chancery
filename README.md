@@ -47,4 +47,4 @@ chancery
 
 I used LLMs to help scout dependency documentation and usage examples. 
 Chancery's code is hand-written and held up to the security standards I'm aware of.
-No-slop PRs welcome.
+Non-slop PRs welcome.

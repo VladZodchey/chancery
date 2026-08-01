@@ -193,8 +193,35 @@
                     '';
                   };
 
+                  rateLimitEnabled = lib.mkOption {
+                    type = lib.types.bool;
+                    default = true;
+                    description = ''
+                      Enable per-client-IP rate limiting on all HTTP endpoints
+                      as a spam defense. Requires trusted reverse proxies to be
+                      configured via `forwardedAllowIps` so real client IPs are
+                      seen.
+                    '';
+                  };
+
+                  rateLimit = lib.mkOption {
+                    type = lib.types.str;
+                    default = "60/minute";
+                    description = ''
+                      Global request rate limit per client IP, in limits-syntax
+                      (e.g. "60/minute", "1000/hour").
+                    '';
+                  };
+
                   logLevel = lib.mkOption {
-                    type = lib.types.enum [ "TRACE" "DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL" ];
+                    type = lib.types.enum [
+                      "TRACE"
+                      "DEBUG"
+                      "INFO"
+                      "WARNING"
+                      "ERROR"
+                      "CRITICAL"
+                    ];
                     default = "INFO";
                     description = ''
                       Log verbosity. INFO records events without revealing which
@@ -293,26 +320,27 @@
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
 
-              environment =
-                {
-                  CHANCERY_DB_PATH = "${cfg.dataDir}/chancery.db";
-                  CHANCERY_BASE_URL = cfg.settings.baseUrl;
-                  CHANCERY_EXPECTED_HOST = lib.concatStringsSep "," cfg.settings.expectedHost;
-                  CHANCERY_FORWARDED_ALLOW_IPS = lib.concatStringsSep "," cfg.settings.forwardedAllowIps;
-                  CHANCERY_LOG_LEVEL = cfg.settings.logLevel;
-                  CHANCERY_PASTE_MAX_SIZE = toString cfg.settings.pasteMaxSize;
-                  CHANCERY_MAX_TTL_SECONDS = toString cfg.settings.maxTtlSeconds;
-                  CHANCERY_PASTE_ID_LENGTH = toString cfg.settings.pasteIdLength;
-                  CHANCERY_TCP_ENABLED = lib.boolToString cfg.settings.tcpEnabled;
-                  CHANCERY_TCP_HOST = cfg.settings.tcpHost;
-                  CHANCERY_TCP_PORT = toString cfg.settings.tcpPort;
-                  CHANCERY_TCP_CONNECT_TIMEOUT = toString cfg.settings.tcpConnectTimeout;
-                  CHANCERY_KDF_OPSLIMIT = toString cfg.settings.kdfOpslimit;
-                  CHANCERY_KDF_MEMLIMIT = toString cfg.settings.kdfMemlimit;
-                }
-                // lib.optionalAttrs (cfg.dbKey != null) {
-                  CHANCERY_DB_KEY = cfg.dbKey;
-                };
+              environment = {
+                CHANCERY_DB_PATH = "${cfg.dataDir}/chancery.db";
+                CHANCERY_BASE_URL = cfg.settings.baseUrl;
+                CHANCERY_EXPECTED_HOST = lib.concatStringsSep "," cfg.settings.expectedHost;
+                CHANCERY_FORWARDED_ALLOW_IPS = lib.concatStringsSep "," cfg.settings.forwardedAllowIps;
+                CHANCERY_RATE_LIMIT_ENABLED = lib.boolToString cfg.settings.rateLimitEnabled;
+                CHANCERY_RATE_LIMIT = cfg.settings.rateLimit;
+                CHANCERY_LOG_LEVEL = cfg.settings.logLevel;
+                CHANCERY_PASTE_MAX_SIZE = toString cfg.settings.pasteMaxSize;
+                CHANCERY_MAX_TTL_SECONDS = toString cfg.settings.maxTtlSeconds;
+                CHANCERY_PASTE_ID_LENGTH = toString cfg.settings.pasteIdLength;
+                CHANCERY_TCP_ENABLED = lib.boolToString cfg.settings.tcpEnabled;
+                CHANCERY_TCP_HOST = cfg.settings.tcpHost;
+                CHANCERY_TCP_PORT = toString cfg.settings.tcpPort;
+                CHANCERY_TCP_CONNECT_TIMEOUT = toString cfg.settings.tcpConnectTimeout;
+                CHANCERY_KDF_OPSLIMIT = toString cfg.settings.kdfOpslimit;
+                CHANCERY_KDF_MEMLIMIT = toString cfg.settings.kdfMemlimit;
+              }
+              // lib.optionalAttrs (cfg.dbKey != null) {
+                CHANCERY_DB_KEY = cfg.dbKey;
+              };
 
               serviceConfig = {
                 ExecStart = "${
@@ -332,7 +360,11 @@
                 ProtectControlGroups = true;
                 RestrictSUIDSGID = true;
                 RestrictRealtime = true;
-                RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+                RestrictAddressFamilies = [
+                  "AF_INET"
+                  "AF_INET6"
+                  "AF_UNIX"
+                ];
               }
               // lib.optionalAttrs (cfg.dbKeyFile != null) {
                 EnvironmentFile = cfg.dbKeyFile;

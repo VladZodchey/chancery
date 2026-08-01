@@ -23,3 +23,5 @@ the working directory is also honored).
 | `CHANCERY_TCP_CONNECT_TIMEOUT` | `60.0`                  | Seconds to allow a client to send a paste. |
 | `CHANCERY_KDF_OPSLIMIT`        | Argon2id MODERATE       | KDF operations limit.                      |
 | `CHANCERY_KDF_MEMLIMIT`        | Argon2id MODERATE       | KDF memory limit in bytes.                 |
+| `CHANCERY_RATE_LIMIT_ENABLED`  | `True`                  | The toggle for rate limiting.              |
+| `CHANCERY_RATE_LIMIT`          | `60/minute`             | Rate limit per endpoint per IP             |
