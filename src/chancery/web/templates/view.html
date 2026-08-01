@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}paste / {{ paste_id or paste.id }}{% endblock %}
+{% block content %}
+{% if locked %}
+  <h1>This paste is password-protected</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/{{ paste_id }}/unlock">
+    <label for="password">Password
+      <input type="password" id="password" name="password" required autofocus>
+    </label>
+    <button type="submit">Unlock</button>
+  </form>
+{% else %}
+  <div class="meta">
+    <code>{{ paste.id }}</code>
+    {% if paste.encrypted %}<span>encrypted</span>{% endif %}
+    {% if paste.burn_after_read %}<span>burn-after-read</span>{% endif %}
+    {% if paste.expires_at %}<span>expires {{ paste.expires_at | datetime }}</span>{% endif %}
+    <span>{{ paste.size_bytes }} bytes</span>
+  </div>
+  <pre class="paste">{{ content }}</pre>
+{% endif %}
+{% endblock %}

@@ -10,6 +10,11 @@ maintainers = [ { name = "V. Zhdanov", email = "hi@vladzodchey.ru" } ]
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.141.1",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "pydantic-settings>=2.14.2",
+    "pynacl>=1.6.2",
+    "sqlcipher3-binary>=0.6.0",
     "typer>=0.27.0",
 ]
 
@@ -26,8 +31,24 @@ version = { attr = "chancery.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+chancery = ["py.typed"]
+"chancery.web" = ["templates/*", "static/*"]
+
 [dependency-groups]
 dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.16.1",
     "ty>=0.0.65",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint.per-file-ignores]
+"src/chancery/cli.py" = ["B008"]

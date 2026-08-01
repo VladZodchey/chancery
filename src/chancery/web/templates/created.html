@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}paste created{% endblock %}
+{% block content %}
+<h1>Paste created</h1>
+<p>Share this link. It is <strong>burn-after-read</strong>: the first visit will
+show the content and permanently delete it.</p>
+<p class="meta"><code><a href="{{ url }}">{{ url }}</a></code></p>
+<form action="/" method="get"><button type="submit">Create another paste</button></form>
+{% endblock %}

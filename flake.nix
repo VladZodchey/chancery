@@ -118,30 +118,202 @@
         in
         {
           options.services.chancery = {
-            enable = lib.mkEnableOption "Chancery, selfhosted paste store";
+            enable = lib.mkEnableOption "Chancery, a security-focused selfhosted paste store";
+
             host = lib.mkOption {
               type = lib.types.str;
               default = "127.0.0.1";
+              description = "Address the HTTP server binds to.";
             };
+
             port = lib.mkOption {
               type = lib.types.port;
               default = 2914;
+              description = "TCP port the HTTP server listens on.";
+            };
+
+            dataDir = lib.mkOption {
+              type = lib.types.path;
+              default = "/var/lib/chancery";
+              description = ''
+                Directory where chancery stores its encrypted database, as
+                ''${dataDir}/chancery.db. The service user's home and working
+                directory are set to this path too, so storing data anywhere —
+                e.g. a fast SSD mounted at `/srv/fast/chancery` — just works.
+                The directory is created at boot if missing.
+              '';
+            };
+
+            dbKey = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = ''
+                Database encryption key (`CHANCERY_DB_KEY`). Set exactly one of
+                `dbKey` or `dbKeyFile`. Prefer `dbKeyFile` so the key does not
+                end up world-readable in the Nix store.
+              '';
+            };
+
+            dbKeyFile = lib.mkOption {
+              type = lib.types.nullOr lib.types.path;
+              default = null;
+              description = ''
+                Path to a systemd `EnvironmentFile` containing the line
+                `CHANCERY_DB_KEY=...`. Set exactly one of `dbKey` or
+                `dbKeyFile`. The file is read when the unit starts, so the key
+                may live in a location only root (or the unit) can read.
+              '';
+            };
+
+            settings = lib.mkOption {
+              type = lib.types.submodule {
+                options = {
+                  baseUrl = lib.mkOption {
+                    type = lib.types.str;
+                    default = "http://127.0.0.1:8000";
+                    description = "Public base URL used in generated paste links.";
+                  };
+
+                  expectedHost = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    description = ''
+                      Hosts allowed in the Host header (empty list = no host
+                      checking). Requests with any other Host are rejected.
+                    '';
+                  };
+
+                  forwardedAllowIps = lib.mkOption {
+                    type = lib.types.listOf lib.types.str;
+                    default = [ ];
+                    description = ''
+                      Reverse proxies trusted to set X-Forwarded-For/Proto/Host
+                      (IPs or CIDR ranges). Empty list = no forwarded headers
+                      are honored.
+                    '';
+                  };
+
+                  logLevel = lib.mkOption {
+                    type = lib.types.enum [ "TRACE" "DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL" ];
+                    default = "INFO";
+                    description = ''
+                      Log verbosity. INFO records events without revealing which
+                      paste (no ids, sizes, or flags); DEBUG adds full detail.
+                    '';
+                  };
+
+                  pasteMaxSize = lib.mkOption {
+                    type = lib.types.ints.positive;
+                    default = 1000000;
+                    description = "Maximum paste size in bytes.";
+                  };
+
+                  maxTtlSeconds = lib.mkOption {
+                    type = lib.types.ints.positive;
+                    default = 30 * 24 * 60 * 60;
+                    description = "Longest allowed time-to-live in seconds.";
+                  };
+
+                  pasteIdLength = lib.mkOption {
+                    type = lib.types.ints.positive;
+                    default = 10;
+                    description = "Length of generated paste ids.";
+                  };
+
+                  tcpEnabled = lib.mkOption {
+                    type = lib.types.bool;
+                    default = false;
+                    description = "Enable the termbin-style TCP listener.";
+                  };
+
+                  tcpHost = lib.mkOption {
+                    type = lib.types.str;
+                    default = "127.0.0.1";
+                    description = "Address the TCP listener binds to.";
+                  };
+
+                  tcpPort = lib.mkOption {
+                    type = lib.types.port;
+                    default = 9999;
+                    description = "Port the TCP listener listens on.";
+                  };
+
+                  tcpConnectTimeout = lib.mkOption {
+                    type = lib.types.number;
+                    default = 60.0;
+                    description = "TCP connection timeout in seconds.";
+                  };
+
+                  kdfOpslimit = lib.mkOption {
+                    type = lib.types.ints.positive;
+                    default = 3;
+                    description = ''
+                      Argon2id opslimit for password-derived keys. Defaults match
+                      PyNaCl's MODERATE profile.
+                    '';
+                  };
+
+                  kdfMemlimit = lib.mkOption {
+                    type = lib.types.ints.positive;
+                    default = 268435456;
+                    description = ''
+                      Argon2id memory limit in bytes for password-derived keys.
+                      Defaults match PyNaCl's MODERATE profile.
+                    '';
+                  };
+                };
+              };
+              default = { };
+              description = ''
+                Runtime settings, exported to the service as `CHANCERY_*`
+                environment variables.
+              '';
             };
           };
 
           config = lib.mkIf cfg.enable {
+            # The admin CLI (delete, list, rekey, ...) opens the DB directly,
+            # so expose the binary on the operator's PATH like Stalwart does.
+            environment.systemPackages = [ self.packages.${pkgs.system}.default ];
+
             users.users.chancery = {
               isSystemUser = true;
               group = "chancery";
-              home = "/var/lib/chancery";
+              home = cfg.dataDir;
               createHome = true;
             };
             users.groups.chancery = { };
 
+            systemd.tmpfiles.rules = [
+              "d ${cfg.dataDir} 0750 chancery chancery -"
+            ];
+
             systemd.services.chancery = {
-              description = "Chancery, selfhosted paste store";
+              description = "Chancery, a security-focused selfhosted paste store";
               wantedBy = [ "multi-user.target" ];
               after = [ "network.target" ];
+
+              environment =
+                {
+                  CHANCERY_DB_PATH = "${cfg.dataDir}/chancery.db";
+                  CHANCERY_BASE_URL = cfg.settings.baseUrl;
+                  CHANCERY_EXPECTED_HOST = lib.concatStringsSep "," cfg.settings.expectedHost;
+                  CHANCERY_FORWARDED_ALLOW_IPS = lib.concatStringsSep "," cfg.settings.forwardedAllowIps;
+                  CHANCERY_LOG_LEVEL = cfg.settings.logLevel;
+                  CHANCERY_PASTE_MAX_SIZE = toString cfg.settings.pasteMaxSize;
+                  CHANCERY_MAX_TTL_SECONDS = toString cfg.settings.maxTtlSeconds;
+                  CHANCERY_PASTE_ID_LENGTH = toString cfg.settings.pasteIdLength;
+                  CHANCERY_TCP_ENABLED = lib.boolToString cfg.settings.tcpEnabled;
+                  CHANCERY_TCP_HOST = cfg.settings.tcpHost;
+                  CHANCERY_TCP_PORT = toString cfg.settings.tcpPort;
+                  CHANCERY_TCP_CONNECT_TIMEOUT = toString cfg.settings.tcpConnectTimeout;
+                  CHANCERY_KDF_OPSLIMIT = toString cfg.settings.kdfOpslimit;
+                  CHANCERY_KDF_MEMLIMIT = toString cfg.settings.kdfMemlimit;
+                }
+                // lib.optionalAttrs (cfg.dbKey != null) {
+                  CHANCERY_DB_KEY = cfg.dbKey;
+                };
+
               serviceConfig = {
                 ExecStart = "${
                   self.packages.${pkgs.system}.default
@@ -149,9 +321,30 @@
                 Restart = "on-failure";
                 User = "chancery";
                 Group = "chancery";
-                WorkingDirectory = "/var/lib/chancery";
+                WorkingDirectory = cfg.dataDir;
+                # The service only ever writes inside dataDir.
+                ProtectSystem = "strict";
+                ReadWritePaths = [ cfg.dataDir ];
+                PrivateTmp = true;
+                NoNewPrivileges = true;
+                ProtectKernelTunables = true;
+                ProtectKernelModules = true;
+                ProtectControlGroups = true;
+                RestrictSUIDSGID = true;
+                RestrictRealtime = true;
+                RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+              }
+              // lib.optionalAttrs (cfg.dbKeyFile != null) {
+                EnvironmentFile = cfg.dbKeyFile;
               };
             };
+
+            assertions = [
+              {
+                assertion = (cfg.dbKey != null) != (cfg.dbKeyFile != null);
+                message = "services.chancery: set exactly one of `dbKey` or `dbKeyFile`.";
+              }
+            ];
           };
         };
     };

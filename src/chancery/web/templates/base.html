@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}chancery{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">chancery</a>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>security-focused selfhosted paste store</footer>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>New paste</h1>
+<form method="post" action="/">
+  <label for="content">Content</label>
+  <textarea id="content" name="content" rows="12" required placeholder="Paste text here..." autofocus></textarea>
+
+  <div class="row">
+    <label for="password">Password (optional)
+      <input type="password" id="password" name="password" placeholder="Encrypt with a password">
+    </label>
+
+    <label for="ttl">Expire
+      <select id="ttl" name="ttl_seconds">
+        <option value="">never</option>
+        <option value="3600">1 hour</option>
+        <option value="86400">1 day</option>
+        <option value="604800">7 days</option>
+        <option value="2592000">30 days</option>
+      </select>
+    </label>
+  </div>
+
+  <label class="check">
+    <input type="checkbox" name="burn_after_read">
+    Burn after reading
+  </label>
+
+  <button type="submit">Create</button>
+</form>
+{% endblock %}
