@@ -48,3 +48,9 @@ chancery
 I used LLMs to help scout dependency documentation and usage examples. 
 Chancery's code is hand-written and held up to the security standards I'm aware of.
 Non-slop PRs welcome.
+
+## Versions 0.2.0 and down
+
+As about three or so people can know, this is not the first attempt at making Chancery.
+Not even the second.
+But the previous attempts are so unsuccessful I decided to do a full rewrite.
