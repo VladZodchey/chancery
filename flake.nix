@@ -158,10 +158,13 @@
               type = lib.types.nullOr lib.types.path;
               default = null;
               description = ''
-                Path to a systemd `EnvironmentFile` containing the line
-                `CHANCERY_DB_KEY=...`. Set exactly one of `dbKey` or
-                `dbKeyFile`. The file is read when the unit starts, so the key
-                may live in a location only root (or the unit) can read.
+                Path to a file containing the raw database encryption key (just
+                the key, no `CHANCERY_DB_KEY=` prefix). The service reads this
+                file as user `chancery` at startup. Set exactly one of `dbKey`
+                or `dbKeyFile`. Prefer `dbKeyFile` so the key does not end up
+                world-readable in the Nix store. With agenix, point this at an
+                `age.secrets.*.path` and set `owner = "chancery"` on the secret
+                so the service can read it.
               '';
             };
 
@@ -340,6 +343,9 @@
               }
               // lib.optionalAttrs (cfg.dbKey != null) {
                 CHANCERY_DB_KEY = cfg.dbKey;
+              }
+              // lib.optionalAttrs (cfg.dbKeyFile != null) {
+                CHANCERY_DB_KEY_FILE = cfg.dbKeyFile;
               };
 
               serviceConfig = {
@@ -365,9 +371,6 @@
                   "AF_INET6"
                   "AF_UNIX"
                 ];
-              }
-              // lib.optionalAttrs (cfg.dbKeyFile != null) {
-                EnvironmentFile = cfg.dbKeyFile;
               };
             };
 

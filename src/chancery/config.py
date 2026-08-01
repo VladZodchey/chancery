@@ -19,6 +19,7 @@ class Settings(BaseSettings):
 
     db_path: Path = Path("chancery.db")
     db_key: SecretStr = SecretStr("")
+    db_key_file: Path | None = None
 
     base_url: str = "http://127.0.0.1:8000"
 
@@ -42,6 +43,16 @@ class Settings(BaseSettings):
     kdf_memlimit: int = bindings.crypto_pwhash_argon2id_MEMLIMIT_MODERATE
 
     def require_key(self) -> str:
+        if self.db_key_file is not None:
+            path = self.db_key_file
+            try:
+                key = path.read_text(encoding="utf-8")
+            except OSError as exc:
+                raise RuntimeError(f"CHANCERY_DB_KEY_FILE {path} could not be read: {exc}") from exc
+            key = key.strip()
+            if not key:
+                raise RuntimeError(f"CHANCERY_DB_KEY_FILE {path} is empty")
+            return key
         key = self.db_key.get_secret_value()
         if not key:
             raise RuntimeError(

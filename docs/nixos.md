@@ -33,7 +33,7 @@ imports = [
     dataDir = "/var/lib/chancery"; # DB will be at ${dataDir}/chancery.db
 
     dbKey = "64-character-hex-key-or-passphrase";
-    # or: dbKeyFile = config.age.secrets.chancery-dbkey.path;  # file with CHANCERY_DB_KEY=...
+    # or: dbKeyFile = config.age.secrets.chancery-dbkey.path;  # file with plaintext secret
 
     settings = {
       baseUrl = "https://paste.example.com";
