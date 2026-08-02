@@ -18,7 +18,7 @@ Built with uv, ruff and ty.
 
 ### Docker
 
-Docker coming soon.
+See [Running with Docker](docs/docker.md)
 
 ### NixOS
 
