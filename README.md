@@ -1,10 +1,11 @@
 # Chancery
 
 Selfhosted, security-focused paste store.
-The project sacrifices some UX in favor of simplicity and security.
+The project sacrifices some UX in favor of simplicity and security.  
+Example: there is no admin web panel and no frontend JS. Everything is server-rendered.
 
 Built on FastAPI, Typer, Jinja2 and sqlcipher3.
-Build with uv, ruff and ty.
+Built with uv, ruff and ty.
 
 ## Security features:
 - Mandatory DB encryption
