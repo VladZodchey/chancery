@@ -1,6 +1,6 @@
 # Running with Docker
 
-Chancery is available on [Docker Hub](https://hub.docker.com/vladzodchey/chancery)
+Chancery is available on [Docker Hub](https://hub.docker.com/r/vladzodchey/chancery)
 
 Example docker-compose config:
 
