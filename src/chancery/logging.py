@@ -1,15 +1,4 @@
-"""Logging setup for chancery.
-
-All chancery loggers live under the ``chancery`` package logger. ``setup_logging``
-configures that logger once and is idempotent, so it is safe to call from both the
-CLI entry point and the app lifespan. The format is uvicorn's own
-(``%(levelprefix)s %(message)s``, colored on a tty), so server and service logs
-look the same.
-
-Secrecy policy: INFO logs never reveal which pastes exist. ``log_event`` emits a
-redacted line at INFO and the full detail (paste ids, sizes, flags) at DEBUG.
-Paste content and passwords are never logged at any level.
-"""
+"""Logging setup for chancery."""
 
 import logging
 import sys
@@ -62,7 +51,7 @@ def log_event(
     public: Mapping[str, Any] | None = None,
     private: Mapping[str, Any] | None = None,
 ) -> None:
-    """Log a domain event without leaking paste existence at INFO.
+    """Log a domain event.
 
     ``public`` fields are safe at the default INFO level. ``private`` fields
     (paste ids, sizes, flags) are only included when the logger is at DEBUG.

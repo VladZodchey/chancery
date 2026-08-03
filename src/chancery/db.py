@@ -38,7 +38,7 @@ def key_sql(key: str) -> str:
     only for convenience.
     """
     if _HEX_KEY.fullmatch(key):
-        return f'"x\'{key.lower()}\'"'
+        return f"\"x'{key.lower()}'\""
     return f"'{key.replace(chr(39), chr(39) * 2)}'"
 
 
@@ -52,7 +52,6 @@ def open_database(path: Path, key: str) -> sqlite3.Connection:
 
     conn.execute(f"PRAGMA key = {key_sql(key)}")
 
-    # Hardening pragma; not supported by every SQLCipher build.
     with suppress(sqlcipher3.DatabaseError):
         conn.execute("PRAGMA cipher_memory_security = ON")
 
@@ -99,8 +98,6 @@ def rekey_database(path: Path, old_key: str, new_key: str) -> None:
     finally:
         conn.close()
 
-    # A rekey interrupted before the swap leaves a partial temporary file
-    # behind; it holds data encrypted with the old key, so drop it.
     leftover = Path(f"{path}-tmp")
     if leftover.exists():
         leftover.unlink(missing_ok=True)
