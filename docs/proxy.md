@@ -2,11 +2,11 @@
 
 Chancery is meant to sit behind a reverse proxy. Two settings make that safe:
 
-- `CHANCERY_EXPECTED_HOST` — set it to your public hostname (comma-separated
+- `CHANCERY_EXPECTED_HOST` -- set it to your public hostname (comma-separated
   if you serve several). Requests arriving with any other `Host` header are
   rejected with `400`, which blocks Host-header poisoning and DNS-rebinding
   style attacks. For example `CHANCERY_EXPECTED_HOST=paste.example.com`.
-- `CHANCERY_FORWARDED_ALLOW_IPS` — the IPs (or CIDRs) of your proxy, e.g.
+- `CHANCERY_FORWARDED_ALLOW_IPS` -- the IPs (or CIDRs) of your proxy, e.g.
   `CHANCERY_FORWARDED_ALLOW_IPS=10.0.0.5`. Only then are
   `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` trusted: the
   real client IP shows up in logs, the scheme becomes `https`, and the

@@ -54,4 +54,4 @@ Non-slop PRs welcome.
 
 As about three or so people can know, this is not the first attempt at making Chancery.
 Not even the second.
-But the previous attempts are so unsuccessful I decided to do a full rewrite.
+But the previous attempts were so unsuccessful I decided to do a full rewrite with a new repo.
