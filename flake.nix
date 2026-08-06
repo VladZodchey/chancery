@@ -137,10 +137,7 @@
               default = "/var/lib/chancery";
               description = ''
                 Directory where chancery stores its encrypted database, as
-                ''${dataDir}/chancery.db. The service user's home and working
-                directory are set to this path too, so storing data anywhere —
-                e.g. a fast SSD mounted at `/srv/fast/chancery` — just works.
-                The directory is created at boot if missing.
+                ''${dataDir}/chancery.db. The directory is created if missing.
               '';
             };
 
@@ -149,8 +146,7 @@
               default = null;
               description = ''
                 Database encryption key (`CHANCERY_DB_KEY`). Set exactly one of
-                `dbKey` or `dbKeyFile`. Prefer `dbKeyFile` so the key does not
-                end up world-readable in the Nix store.
+                `dbKey` or `dbKeyFile`. Prefer `dbKeyFile` over this!
               '';
             };
 
@@ -158,13 +154,9 @@
               type = lib.types.nullOr lib.types.path;
               default = null;
               description = ''
-                Path to a file containing the raw database encryption key (just
-                the key, no `CHANCERY_DB_KEY=` prefix). The service reads this
-                file as user `chancery` at startup. Set exactly one of `dbKey`
-                or `dbKeyFile`. Prefer `dbKeyFile` so the key does not end up
-                world-readable in the Nix store. With agenix, point this at an
-                `age.secrets.*.path` and set `owner = "chancery"` on the secret
-                so the service can read it.
+                Path to a file containing the raw database encryption key.
+                The service reads this file as user `chancery` at startup.
+                Set exactly one of `dbKey` or `dbKeyFile`. Prefer this over `dbKey`!
               '';
             };
 
@@ -302,8 +294,6 @@
           };
 
           config = lib.mkIf cfg.enable {
-            # The admin CLI (delete, list, rekey, ...) opens the DB directly,
-            # so expose the binary on the operator's PATH like Stalwart does.
             environment.systemPackages = [ self.packages.${pkgs.system}.default ];
 
             users.users.chancery = {
@@ -356,7 +346,6 @@
                 User = "chancery";
                 Group = "chancery";
                 WorkingDirectory = cfg.dataDir;
-                # The service only ever writes inside dataDir.
                 ProtectSystem = "strict";
                 ReadWritePaths = [ cfg.dataDir ];
                 PrivateTmp = true;
