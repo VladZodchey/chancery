@@ -266,6 +266,17 @@
                     description = "TCP connection timeout in seconds.";
                   };
 
+                  tcpCrawlerFilter = lib.mkOption {
+                    type = lib.types.bool;
+                    default = true;
+                    description = ''
+                      Reject TCP connections whose first line looks like an
+                      HTTP request, i.e. web crawlers that mistake the paste
+                      port for an HTTP server. Disable if you need to paste
+                      HTTP requests over the raw TCP listener.
+                    '';
+                  };
+
                   kdfOpslimit = lib.mkOption {
                     type = lib.types.ints.positive;
                     default = 3;
@@ -328,6 +339,7 @@
                 CHANCERY_TCP_HOST = cfg.settings.tcpHost;
                 CHANCERY_TCP_PORT = toString cfg.settings.tcpPort;
                 CHANCERY_TCP_CONNECT_TIMEOUT = toString cfg.settings.tcpConnectTimeout;
+                CHANCERY_TCP_CRAWLER_FILTER = lib.boolToString cfg.settings.tcpCrawlerFilter;
                 CHANCERY_KDF_OPSLIMIT = toString cfg.settings.kdfOpslimit;
                 CHANCERY_KDF_MEMLIMIT = toString cfg.settings.kdfMemlimit;
               }

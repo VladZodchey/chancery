@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     tcp_host: str = "127.0.0.1"
     tcp_port: int = 9999
     tcp_connect_timeout: float = 60.0
+    tcp_crawler_filter: bool = True
 
     kdf_opslimit: int = bindings.crypto_pwhash_argon2id_OPSLIMIT_MODERATE
     kdf_memlimit: int = bindings.crypto_pwhash_argon2id_MEMLIMIT_MODERATE

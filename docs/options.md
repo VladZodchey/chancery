@@ -21,6 +21,11 @@ the working directory is also honored).
 | `CHANCERY_TCP_HOST`            | `127.0.0.1`             | TCP bind address.                          |
 | `CHANCERY_TCP_PORT`            | `9999`                  | TCP port.                                  |
 | `CHANCERY_TCP_CONNECT_TIMEOUT` | `60.0`                  | Seconds to allow a client to send a paste. |
+| `CHANCERY_TCP_CRAWLER_FILTER`  | `true`                  | Reject TCP connections whose first line    |
+|                                |                         | looks like an HTTP request (web crawlers   |
+|                                |                         | mistaking the port for an HTTP server).    |
+|                                |                         | Set `false` to allow pasting HTTP requests |
+|                                |                         | over the raw TCP listener.                 |
 | `CHANCERY_KDF_OPSLIMIT`        | Argon2id MODERATE       | KDF operations limit.                      |
 | `CHANCERY_KDF_MEMLIMIT`        | Argon2id MODERATE       | KDF memory limit in bytes.                 |
 | `CHANCERY_RATE_LIMIT_ENABLED`  | `True`                  | The toggle for rate limiting.              |

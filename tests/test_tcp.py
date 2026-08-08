@@ -56,9 +56,29 @@ async def test_tcp_rejects_too_large(settings, service):
     assert data.decode().startswith("error: paste too large")
 
 
-async def test_tcp_empty_paste(settings, service):
+async def test_tcp_empty_paste_rejected(settings, service):
     server, port = await _start(settings, service)
     async with server:
         data = await _send(port, b"")
+    assert data.decode().startswith("error: empty pastes are not allowed")
+    assert service.stats()["pastes"] == 0
+
+
+async def test_tcp_rejects_http_request(settings, service):
+    server, port = await _start(settings, service)
+    async with server:
+        data = await _send(
+            port,
+            b"GET / HTTP/1.1\r\nHost: example.com\r\nUser-Agent: bot\r\n\r\n",
+        )
+    assert data.decode().startswith("error:")
+    assert service.stats()["pastes"] == 0
+
+
+async def test_tcp_crawler_filter_disabled_stores_http_request(settings, service):
+    settings.tcp_crawler_filter = False
+    server, port = await _start(settings, service)
+    async with server:
+        data = await _send(port, b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n")
     paste_id = data.decode().strip().rsplit("/", 1)[1]
-    assert service.get(paste_id).text == ""
+    assert service.get(paste_id).text.startswith("GET / HTTP/1.1")

@@ -32,6 +32,11 @@ def test_rejects_nul_bytes(service):
         service.create("before\x00after")
 
 
+def test_rejects_empty_content(service):
+    with pytest.raises(InvalidContent):
+        service.create("")
+
+
 @pytest.mark.parametrize("char", ["\x07", "\x08", "\x1b", "\x0b", "\x0c", "\x7f", "\x9b"])
 def test_rejects_control_characters(service, char):
     with pytest.raises(InvalidContent):

@@ -91,6 +91,8 @@ class PasteService:
         burn_after_read: bool = False,
         ttl_seconds: int | None = None,
     ) -> CreatedPaste:
+        if not content:
+            raise InvalidContent("content must not be empty")
         validate_content(content)
 
         encoded = content.encode("utf-8")

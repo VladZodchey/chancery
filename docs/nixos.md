@@ -62,6 +62,7 @@ All `services.chancery.settings` options with Env prototypes and defaults:
 - `tcpHost` - `CHANCERY_TCP_HOST` - `127.0.0.1`
 - `tcpPort` - `CHANCERY_TCP_PORT` - `9999`
 - `tcpConnectTimeout` - `CHANCERY_TCP_CONNECT_TIMEOUT` - `60.0`
+- `tcpCrawlerFilter` - `CHANCERY_TCP_CRAWLER_FILTER` - `true` (reject TCP pastes whose first line looks like an HTTP request)
 - `kdfOpslimit` - `CHANCERY_KDF_OPSLIMIT` - `Argon2id MODERATE`
 - `kdfMemlimit` - `CHANCERY_KDF_MEMLIMIT` - `Argon2id MODERATE`
 - `rateLimitEnabled` - `CHANCERY_RATE_LIMIT_ENABLED` - `true`

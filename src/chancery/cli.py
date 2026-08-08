@@ -9,6 +9,7 @@ from .config import Settings
 from .db import init_schema, open_database, rekey_database
 from .logging import setup_logging
 from .service import (
+    InvalidContent,
     InvalidPassword,
     PasteNeedsPassword,
     PasteService,
@@ -175,6 +176,9 @@ def create(
     try:
         result = service.create(text, password=password, burn_after_read=burn, ttl_seconds=ttl)
         typer.echo(result.url)
+    except InvalidContent as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
     finally:
         service.close()
 

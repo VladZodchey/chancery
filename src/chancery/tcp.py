@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from contextlib import suppress
 
 from .config import Settings
@@ -9,6 +10,14 @@ logger = logging.getLogger(__name__)
 
 _CHUNK_SIZE = 64 * 1024
 _IDLE_TIMEOUT = 1.0
+
+# Termbin-style paste servers are a favorite target of web crawlers that
+# mistake the port for an HTTP server and blast a GET request at it; the whole
+# header then gets stored as a paste. Detect an HTTP request line and refuse.
+_HTTP_REQUEST_RE = re.compile(
+    r"^(?:GET|POST|HEAD|PUT|DELETE|OPTIONS|PATCH|CONNECT|TRACE|PRI) "
+    r"\S+ HTTP/\d+(?:\.\d+)?"
+)
 
 
 class TooLargeError(Exception):
@@ -59,6 +68,22 @@ async def handle_client(
         logger.warning("tcp rejected non-UTF-8 paste, peer=%s", peer)
         await _error(writer, "only UTF-8 text without control characters is supported")
         return
+
+    if not text:
+        logger.warning("tcp rejected empty paste, peer=%s", peer)
+        await _error(writer, "empty pastes are not allowed")
+        return
+
+    if settings.tcp_crawler_filter:
+        first_line = text.splitlines()[0]
+        if _HTTP_REQUEST_RE.match(first_line):
+            logger.warning("tcp rejected HTTP request, peer=%s", peer)
+            await _error(
+                writer,
+                "this is a paste server, not an HTTP server; "
+                "send the paste text and close the connection",
+            )
+            return
 
     try:
         result = await asyncio.to_thread(service.create, text)
