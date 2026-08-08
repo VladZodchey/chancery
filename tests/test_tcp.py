@@ -42,6 +42,13 @@ async def test_tcp_rejects_binary(settings, service):
     assert data.decode().startswith("error: only UTF-8")
 
 
+async def test_tcp_rejects_escape_sequences(settings, service):
+    server, port = await _start(settings, service)
+    async with server:
+        data = await _send(port, b"\x1b]0;;hidden\x07abuse report")
+    assert data.decode().startswith("error: only UTF-8")
+
+
 async def test_tcp_rejects_too_large(settings, service):
     server, port = await _start(settings, service)
     async with server:

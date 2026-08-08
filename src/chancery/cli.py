@@ -118,7 +118,10 @@ def rekey(
         help="Path to the encrypted database (defaults to $CHANCERY_DB_PATH).",
     ),
     db_key: str | None = typer.Option(
-        None, "--db-key", "-k", help="Current database encryption key (defaults to $CHANCERY_DB_KEY)."
+        None,
+        "--db-key",
+        "-k",
+        help="Current database encryption key (defaults to $CHANCERY_DB_KEY).",
     ),
 ) -> None:
     """Re-encrypt the database with a new key.

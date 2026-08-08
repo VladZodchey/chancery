@@ -10,7 +10,9 @@ def derive_key(password: str, salt: bytes, opslimit: int, memlimit: int) -> byte
     return argon2id.kdf(KEY_LENGTH, password.encode("utf-8"), salt, opslimit, memlimit)
 
 
-def encrypt(plaintext: bytes, password: str, opslimit: int, memlimit: int) -> tuple[bytes, bytes, int, int]:
+def encrypt(
+    plaintext: bytes, password: str, opslimit: int, memlimit: int
+) -> tuple[bytes, bytes, int, int]:
     """Encrypt plaintext with a key derived from ``password``.
 
     Returns ``(ciphertext, salt, opslimit, memlimit)``. The ciphertext embeds

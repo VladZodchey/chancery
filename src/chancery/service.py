@@ -1,4 +1,5 @@
 import logging
+import re
 import sqlite3
 import threading
 import time
@@ -10,6 +11,14 @@ from .logging import log_event
 from .models import CreatedPaste, Paste
 
 logger = logging.getLogger(__name__)
+
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+
+
+def validate_content(content: str) -> None:
+    """Raise InvalidContent if the content contains unsafe control characters."""
+    if _CONTROL_RE.search(content):
+        raise InvalidContent("content must be UTF-8 text without control characters")
 
 
 class PasteError(Exception):
@@ -70,6 +79,7 @@ class PasteService:
 
     def close(self) -> None:
         self._conn.close()
+
     def resolve_url(self, paste_id: str) -> str:
         return f"{self._base_url}/{paste_id}"
 
@@ -81,21 +91,14 @@ class PasteService:
         burn_after_read: bool = False,
         ttl_seconds: int | None = None,
     ) -> CreatedPaste:
-        if "\x00" in content:
-            raise InvalidContent("content must be UTF-8 text without NUL bytes")
+        validate_content(content)
 
         encoded = content.encode("utf-8")
         if len(encoded) > self._paste_max_size:
-            raise PasteTooLarge(
-                f"content is {len(encoded)} bytes, limit is {self._paste_max_size}"
-            )
+            raise PasteTooLarge(f"content is {len(encoded)} bytes, limit is {self._paste_max_size}")
 
-        if ttl_seconds is not None and (
-            ttl_seconds <= 0 or ttl_seconds > self._max_ttl_seconds
-        ):
-            raise InvalidTTL(
-                f"ttl_seconds must be between 1 and {self._max_ttl_seconds}"
-            )
+        if ttl_seconds is not None and (ttl_seconds <= 0 or ttl_seconds > self._max_ttl_seconds):
+            raise InvalidTTL(f"ttl_seconds must be between 1 and {self._max_ttl_seconds}")
 
         now = int(time.time())
         expires_at = now + ttl_seconds if ttl_seconds is not None else None
@@ -151,9 +154,7 @@ class PasteService:
     def get(self, paste_id: str, *, password: str | None = None) -> Paste:
         now = int(time.time())
         with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM pastes WHERE id = ?", (paste_id,)
-            ).fetchone()
+            row = self._conn.execute("SELECT * FROM pastes WHERE id = ?", (paste_id,)).fetchone()
             if row is None:
                 raise PasteNotFound(paste_id)
 
@@ -198,9 +199,7 @@ class PasteService:
 
     def delete(self, paste_id: str) -> bool:
         with self._lock:
-            cur = self._conn.execute(
-                "DELETE FROM pastes WHERE id = ?", (paste_id,)
-            )
+            cur = self._conn.execute("DELETE FROM pastes WHERE id = ?", (paste_id,))
             self._conn.commit()
             deleted = cur.rowcount > 0
         if deleted:
@@ -210,8 +209,7 @@ class PasteService:
     def list(self, *, limit: int = 50, offset: int = 0) -> list[Paste]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM pastes ORDER BY created_at DESC, rowid DESC "
-                "LIMIT ? OFFSET ?",
+                "SELECT * FROM pastes ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             ).fetchall()
         return [self._row_to_paste(row) for row in rows]
@@ -243,8 +241,7 @@ class PasteService:
                 "SELECT COUNT(*) FROM pastes WHERE burn_after_read = 1"
             ).fetchone()[0]
             expired = self._conn.execute(
-                "SELECT COUNT(*) FROM pastes "
-                "WHERE expires_at IS NOT NULL AND expires_at < ?",
+                "SELECT COUNT(*) FROM pastes WHERE expires_at IS NOT NULL AND expires_at < ?",
                 (now,),
             ).fetchone()[0]
         return {
@@ -258,9 +255,7 @@ class PasteService:
     def _generate_unique_id(self) -> str:
         while True:
             paste_id = ids.new_id(self._id_length)
-            exists = self._conn.execute(
-                "SELECT 1 FROM pastes WHERE id = ?", (paste_id,)
-            ).fetchone()
+            exists = self._conn.execute("SELECT 1 FROM pastes WHERE id = ?", (paste_id,)).fetchone()
             if exists is None:
                 return paste_id
 

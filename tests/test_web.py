@@ -111,6 +111,7 @@ async def test_api_burn_via_api(client):
 async def test_api_errors(client):
     assert (await client.get("/api/pastes/doesnotexist")).status_code == 404
     assert (await client.post("/api/pastes", json={"content": "\x00bad"})).status_code == 400
+    assert (await client.post("/api/pastes", json={"content": "\x1b]0;evil\x07"})).status_code == 400
     assert (await client.post("/api/pastes", json={"content": "x" * 2000})).status_code == 413
     assert (
         await client.post("/api/pastes", json={"content": "x", "ttl_seconds": -1})

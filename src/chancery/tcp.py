@@ -3,7 +3,7 @@ import logging
 from contextlib import suppress
 
 from .config import Settings
-from .service import InvalidContent, PasteService, PasteTooLarge
+from .service import InvalidContent, PasteService, PasteTooLarge, validate_content
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +54,10 @@ async def handle_client(
 
     try:
         text = data.decode("utf-8")
-        if "\x00" in text:
-            raise InvalidContent("NUL byte")
+        validate_content(text)
     except (UnicodeDecodeError, InvalidContent):
         logger.warning("tcp rejected non-UTF-8 paste, peer=%s", peer)
-        await _error(writer, "only UTF-8 text is supported")
+        await _error(writer, "only UTF-8 text without control characters is supported")
         return
 
     try:
