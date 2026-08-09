@@ -7,6 +7,13 @@ Example: there is no admin web panel and no frontend JS. Everything is server-re
 Built on FastAPI, Typer, Jinja2 and sqlcipher3.
 Built with uv, ruff and ty.
 
+## Source
+
+The real repository is on [Codeberg](https://codeberg.org/vladzodchey/chancery).
+
+[Github](https://github.com/vladzodchey/chancery) 
+and [personal Forgejo](https://git.capyboyars.ru/vladzodchey/chancery) are automated mirrors of Codeberg.
+
 ## Security features:
 - Mandatory DB encryption
 - Password-protected pastes (Content encrypted with XSalsa20-Poly1305 under a key derived via Argon2id)
